@@ -61,7 +61,7 @@
 #define LT_OBJDIR ".libs/"
 
 /* Disables the message-passing-interface (MPI) support. */
-/* #undef MPI_DISABLE */
+#define MPI_DISABLE /**/
 
 /* Enables MPI I/O support. */
 /* #undef MPI_USE_PARALLEL_IO */

@@ -1,5 +1,5 @@
 /* AUTORIGHTS
-Copyright (C) 2006-2012  Ilker R. Capoglu
+Copyright (C) 2006-2018  Ilker R. Capoglu and Di Zhang
 
     This file is part of the Angora package.
 
@@ -1337,39 +1337,40 @@ void PlaceSurfaceEngravingProfileFromFile(
 	double param_lower_limit; //lower limit of the constitutive parameter
 	int k;
 
-  param_lower_limit = 1;
+    param_lower_limit = 1;
 
 	for (int i=1; i<=xExtent; i++)
 	{
 		for (int j=1; j<=yExtent; j++)
 		{
-      k = thickness-1;
-      if ((k>=klower)&&(k<=kupper+1))
-      {
-        if ((j>=jleft)&&(j<=jright+1))
-        {
-          if ((i>=iback)&&(i<=ifront))
+          k = thickness-1;
+          if ((k>=klower)&&(k<=kupper+1))
           {
-				SurfaceEngravingProfileFile.read((char*)&thickness,sizeof(thickness));	//read the constitutive parameter
+            if ((j>=jleft)&&(j<=jright+1))
+            {
+              if ((i>=iback)&&(i<=ifront))
+              {
+                    SurfaceEngravingProfileFile.read((char*)&thickness,sizeof(thickness));	//read the constitutive parameter
 
-				param_temp = eps_x(eps_x_indices(xCornerCell+i-1,yCornerCell+j-1,zCornerCell+thickness-2));
-				param_temp = (param_temp+1.0)/2;
-				cout << param_temp << endl;
+                    param_temp = eps_x(eps_x_indices(xCornerCell+i-1,yCornerCell+j-1,zCornerCell+thickness-2));
+                    param_temp = (param_temp+1.0)/2;
 
-				if (param_temp>=param_lower_limit)
-				{//if the value is nonpositive, don't bother with it at all
-					if (param_temp>max_param) max_param=param_temp;	//update the maximum constitutive parameter
-					if (param_temp<min_param) min_param=param_temp;	//update the minimum constitutive parameter
-				}
+                    if (param_temp>=param_lower_limit)
+                    {//if the value is nonpositive, don't bother with it at all
+                        if (param_temp>max_param) max_param=param_temp;	//update the maximum constitutive parameter
+                        if (param_temp<min_param) min_param=param_temp;	//update the minimum constitutive parameter
+                    }
+              }
+            }
           }
-        }
-      }
 		}
 	}
 #ifndef MPI_DISABLE
+    float tempbuf_1 = max_param; // Temp solution for errors with MPI_IN_PLACE, may occur in IBM systems.
+    float tempbuf_2 = min_param;
 	MPI_Barrier(MPI_CartSubComm);
-	MPI_Reduce(MPI_IN_PLACE,&max_param,1,MPI_FLOAT,MPI_MAX,0,MPI_CartSubComm);
-	MPI_Reduce(MPI_IN_PLACE,&min_param,1,MPI_FLOAT,MPI_MIN,0,MPI_CartSubComm);
+	MPI_Reduce(tempbuf_1,&max_param,1,MPI_FLOAT,MPI_MAX,0,MPI_CartSubComm);
+	MPI_Reduce(tempbuf_2,&min_param,1,MPI_FLOAT,MPI_MIN,0,MPI_CartSubComm);
 	MPI_Bcast(&max_param,1,MPI_FLOAT,0,MPI_CartSubComm);
 	MPI_Bcast(&min_param,1,MPI_FLOAT,0,MPI_CartSubComm);
 #endif
@@ -1400,10 +1401,10 @@ void PlaceSurfaceEngravingProfileFromFile(
 
 	SurfaceEngravingProfileFile.seekg(pos_saved,ios::beg);	//return to the saved position in the file
 
-  int material_offset_surface_engraving;	//offset of the current material index beginning from the material index that was saved before the creation of new materials
+    int material_offset_surface_engraving;	//offset of the current material index beginning from the material index that was saved before the creation of new materials
 	int material_index_eps_surface_engraving;
 	int i,j;
-  Cmat upper_interf_material_surface_engraving;
+    Cmat upper_interf_material_surface_engraving;
 
 	for (j=yCornerCell; j<=yCornerCell+yExtent-1; j++)
 	{
@@ -1469,46 +1470,46 @@ void PlaceSurfaceEngravingProfileFromFile(
 			}
 
 
-      k = zCornerCell+thickness-1;
-      if ((k>=klower)&&(k<=kupper+1))
-      {
-        if ((j>=jleft)&&(j<=jright+1))
-        {
-          if ((i>=iback)&&(i<=ifront))
+          k = zCornerCell+thickness-1;
+          if ((k>=klower)&&(k<=kupper+1))
           {
-            upper_interf_material_surface_engraving.set_eps_x((eps_x(eps_x_indices(i,j,k)) + 1.0)/2.0);
-            param_temp = upper_interf_material_surface_engraving.eps_x_value();
-            material_offset_surface_engraving = (int)((param_temp-min_param)/(max_param-min_param)*(max_number_of_new_materials-1));
-            //material_offset is between 0 and (max_number_of_new_materials-1)  (both included)
-            material_index_eps_surface_engraving = material_index_saved_eps_x + (material_offset_surface_engraving + 1);	//this is the absolute index in the current material list
+            if ((j>=jleft)&&(j<=jright+1))
+            {
+              if ((i>=iback)&&(i<=ifront))
+              {
+                upper_interf_material_surface_engraving.set_eps_x((eps_x(eps_x_indices(i,j,k)) + 1.0)/2.0);
+                param_temp = upper_interf_material_surface_engraving.eps_x_value();
+                material_offset_surface_engraving = (int)((param_temp-min_param)/(max_param-min_param)*(max_number_of_new_materials-1));
+                //material_offset is between 0 and (max_number_of_new_materials-1)  (both included)
+                material_index_eps_surface_engraving = material_index_saved_eps_x + (material_offset_surface_engraving + 1);	//this is the absolute index in the current material list
+                                                // +1 because of the range of material_offset above
+                //place material at the center of the cell
+                eps_x_indices(i,j,k) = material_index_eps_surface_engraving;
+                Ca_X(i,j,k)=(1-dt*cond_e_x(cond_e_x_indices(i,j,k))/(2.0*eps_x(eps_x_indices(i,j,k))*epsilon_0))/(1+dt*cond_e_x(cond_e_x_indices(i,j,k))/(2.0*eps_x(eps_x_indices(i,j,k))*epsilon_0));
+                Cb_X(i,j,k)=dt/eps_x(eps_x_indices(i,j,k))/epsilon_0/dx/(1+dt*cond_e_x(cond_e_x_indices(i,j,k))/(2.0*eps_x(eps_x_indices(i,j,k))*epsilon_0));
+                      // Fix the x,y components at the interface z-position
+              }
+            }
+          }
+          if ((k>=klower)&&(k<=kupper+1))
+          {
+            if ((j>=jleft)&&(j<=jright))
+            {
+              if ((i>=iback)&&(i<=ifront+1))
+              {
+                upper_interf_material_surface_engraving.set_eps_y((eps_y(eps_y_indices(i,j,k)) + 1.0)/2.0);
+                param_temp = upper_interf_material_surface_engraving.eps_y_value();
+                material_offset_surface_engraving = (int)((param_temp-min_param)/(max_param-min_param)*(max_number_of_new_materials-1));
+                //material_offset is between 0 and (max_number_of_new_materials-1)  (both included)
+                material_index_eps_surface_engraving = material_index_saved_eps_y + (material_offset_surface_engraving + 1);	//this is the absolute index in the current material list
                                             // +1 because of the range of material_offset above
-            //place material at the center of the cell
-            eps_x_indices(i,j,k) = material_index_eps_surface_engraving;
-            Ca_X(i,j,k)=(1-dt*cond_e_x(cond_e_x_indices(i,j,k))/(2.0*eps_x(eps_x_indices(i,j,k))*epsilon_0))/(1+dt*cond_e_x(cond_e_x_indices(i,j,k))/(2.0*eps_x(eps_x_indices(i,j,k))*epsilon_0));
-            Cb_X(i,j,k)=dt/eps_x(eps_x_indices(i,j,k))/epsilon_0/dx/(1+dt*cond_e_x(cond_e_x_indices(i,j,k))/(2.0*eps_x(eps_x_indices(i,j,k))*epsilon_0));
-			      // Fix the x,y components at the interface z-position
+                //place material on the lower side of the cell
+                eps_y_indices(i,j,k) = material_index_eps_surface_engraving;
+                Ca_Y(i,j,k)=(1-dt*cond_e_y(cond_e_y_indices(i,j,k))/(2.0*eps_y(eps_y_indices(i,j,k))*epsilon_0))/(1+dt*cond_e_y(cond_e_y_indices(i,j,k))/(2.0*eps_y(eps_y_indices(i,j,k))*epsilon_0));
+                Cb_Y(i,j,k)=dt/eps_y(eps_y_indices(i,j,k))/epsilon_0/dx/(1+dt*cond_e_y(cond_e_y_indices(i,j,k))/(2.0*eps_y(eps_y_indices(i,j,k))*epsilon_0));
+              }
+            }
           }
-        }
-      }
-      if ((k>=klower)&&(k<=kupper+1))
-      {
-        if ((j>=jleft)&&(j<=jright))
-        {
-          if ((i>=iback)&&(i<=ifront+1))
-          {
-            upper_interf_material_surface_engraving.set_eps_y((eps_y(eps_y_indices(i,j,k)) + 1.0)/2.0);
-            param_temp = upper_interf_material_surface_engraving.eps_y_value();
-            material_offset_surface_engraving = (int)((param_temp-min_param)/(max_param-min_param)*(max_number_of_new_materials-1));
-            //material_offset is between 0 and (max_number_of_new_materials-1)  (both included)
-            material_index_eps_surface_engraving = material_index_saved_eps_y + (material_offset_surface_engraving + 1);	//this is the absolute index in the current material list
-                                        // +1 because of the range of material_offset above
-            //place material on the lower side of the cell
-            eps_y_indices(i,j,k) = material_index_eps_surface_engraving;
-            Ca_Y(i,j,k)=(1-dt*cond_e_y(cond_e_y_indices(i,j,k))/(2.0*eps_y(eps_y_indices(i,j,k))*epsilon_0))/(1+dt*cond_e_y(cond_e_y_indices(i,j,k))/(2.0*eps_y(eps_y_indices(i,j,k))*epsilon_0));
-            Cb_Y(i,j,k)=dt/eps_y(eps_y_indices(i,j,k))/epsilon_0/dx/(1+dt*cond_e_y(cond_e_y_indices(i,j,k))/(2.0*eps_y(eps_y_indices(i,j,k))*epsilon_0));
-          }
-        }
-      }
 		}
 	}
 

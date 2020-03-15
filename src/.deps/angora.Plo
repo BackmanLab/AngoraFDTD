@@ -162,81 +162,44 @@ angora.lo: angora.cpp /usr/include/stdc-predef.h globals.h headers.h \
  /usr/include/blitz/array/stencils.cc /usr/include/blitz/tinymat2.cc \
  /usr/include/blitz/tmevaluate.h /usr/include/blitz/tinymat2io.cc \
  /usr/include/blitz/tinyvec2.cc /usr/include/blitz/tv2fastiter.h \
- constants.h material/Cmat_types.h /usr/lib/openmpi/include/mpi.h \
- /usr/lib/openmpi/include/mpi_portable_platform.h \
- /usr/lib/openmpi/include/openmpi/ompi/mpi/cxx/mpicxx.h \
- /usr/include/c++/4.8/map /usr/include/c++/4.8/bits/stl_tree.h \
- /usr/include/c++/4.8/bits/stl_map.h \
- /usr/include/c++/4.8/bits/stl_multimap.h /usr/include/c++/4.8/utility \
- /usr/include/c++/4.8/bits/stl_relops.h \
- /usr/lib/openmpi/include/openmpi/ompi/mpi/cxx/constants.h \
- /usr/lib/openmpi/include/openmpi/ompi/mpi/cxx/functions.h \
- /usr/lib/openmpi/include/openmpi/ompi/mpi/cxx/datatype.h \
- /usr/lib/openmpi/include/openmpi/ompi/mpi/cxx/exception.h \
- /usr/lib/openmpi/include/openmpi/ompi/mpi/cxx/op.h \
- /usr/lib/openmpi/include/openmpi/ompi/mpi/cxx/status.h \
- /usr/lib/openmpi/include/openmpi/ompi/mpi/cxx/request.h \
- /usr/lib/openmpi/include/openmpi/ompi/mpi/cxx/group.h \
- /usr/lib/openmpi/include/openmpi/ompi/mpi/cxx/comm.h \
- /usr/lib/openmpi/include/openmpi/ompi/mpi/cxx/win.h \
- /usr/lib/openmpi/include/openmpi/ompi/mpi/cxx/file.h \
- /usr/lib/openmpi/include/openmpi/ompi/mpi/cxx/errhandler.h \
- /usr/lib/openmpi/include/openmpi/ompi/mpi/cxx/intracomm.h \
- /usr/lib/openmpi/include/openmpi/ompi/mpi/cxx/topology.h \
- /usr/lib/openmpi/include/openmpi/ompi/mpi/cxx/intercomm.h \
- /usr/lib/openmpi/include/openmpi/ompi/mpi/cxx/info.h \
- /usr/lib/openmpi/include/openmpi/ompi/mpi/cxx/datatype_inln.h \
- /usr/lib/openmpi/include/openmpi/ompi/mpi/cxx/functions_inln.h \
- /usr/lib/openmpi/include/openmpi/ompi/mpi/cxx/request_inln.h \
- /usr/lib/openmpi/include/openmpi/ompi/mpi/cxx/comm_inln.h \
- /usr/lib/openmpi/include/openmpi/ompi/mpi/cxx/intracomm_inln.h \
- /usr/lib/openmpi/include/openmpi/ompi/mpi/cxx/topology_inln.h \
- /usr/lib/openmpi/include/openmpi/ompi/mpi/cxx/intercomm_inln.h \
- /usr/lib/openmpi/include/openmpi/ompi/mpi/cxx/group_inln.h \
- /usr/lib/openmpi/include/openmpi/ompi/mpi/cxx/op_inln.h \
- /usr/lib/openmpi/include/openmpi/ompi/mpi/cxx/errhandler_inln.h \
- /usr/lib/openmpi/include/openmpi/ompi/mpi/cxx/status_inln.h \
- /usr/lib/openmpi/include/openmpi/ompi/mpi/cxx/info_inln.h \
- /usr/lib/openmpi/include/openmpi/ompi/mpi/cxx/win_inln.h \
- /usr/lib/openmpi/include/openmpi/ompi/mpi/cxx/file_inln.h \
- /usr/include/H5Cpp.h /usr/include/H5Include.h /usr/include/hdf5.h \
- /usr/include/H5public.h /usr/include/H5pubconf.h \
- /usr/include/H5version.h /usr/include/inttypes.h \
- /usr/include/H5api_adpt.h /usr/include/H5Apublic.h \
- /usr/include/H5Ipublic.h /usr/include/H5Opublic.h \
- /usr/include/H5Lpublic.h /usr/include/H5Tpublic.h \
- /usr/include/H5ACpublic.h /usr/include/H5Cpublic.h \
- /usr/include/H5Dpublic.h /usr/include/H5Epublic.h \
- /usr/include/H5Epubgen.h /usr/include/H5Fpublic.h \
- /usr/include/H5FDpublic.h /usr/include/H5Gpublic.h \
- /usr/include/H5MMpublic.h /usr/include/H5Ppublic.h \
- /usr/include/H5Zpublic.h /usr/include/H5Rpublic.h \
- /usr/include/H5Spublic.h /usr/include/H5FDcore.h \
- /usr/include/H5FDfamily.h /usr/include/H5FDlog.h /usr/include/H5FDmpi.h \
- /usr/include/H5FDmpio.h /usr/include/H5FDmpiposix.h \
- /usr/include/H5FDmulti.h /usr/include/H5FDsec2.h \
- /usr/include/H5FDstdio.h /usr/include/H5FDdirect.h \
- /usr/include/H5Exception.h /usr/include/H5IdComponent.h \
- /usr/include/H5DataSpace.h /usr/include/H5PropList.h \
- /usr/include/H5Object.h /usr/include/H5Classes.h \
- /usr/include/H5AbstractDs.h /usr/include/H5Attribute.h \
- /usr/include/H5DcreatProp.h /usr/include/H5CommonFG.h \
- /usr/include/H5DataType.h /usr/include/H5DxferProp.h \
- /usr/include/H5FaccProp.h /usr/include/H5FcreatProp.h \
- /usr/include/H5AtomType.h /usr/include/H5PredType.h \
- /usr/include/H5EnumType.h /usr/include/H5IntType.h \
- /usr/include/H5FloatType.h /usr/include/H5StrType.h \
- /usr/include/H5CompType.h /usr/include/H5ArrayType.h \
- /usr/include/H5VarLenType.h /usr/include/H5DataSet.h \
- /usr/include/H5Group.h /usr/include/H5File.h /usr/include/H5Library.h \
- ../src/main/read_global.h config/cfg_utils.h angora_excp.h headers.h \
- /usr/include/libconfig.h++ ../src/material/read_mat.h \
- ../src/main/read_geom.h ../src/main/read_basedirs.h \
- ../src/main/read_multgridinfo.h ../src/shape/read_shapes.h \
- ../src/waveforms/read_wfs.h ../src/tfsf/read_tfsf.h \
- ../src/nffft/read_nffft_td.h ../src/nffft/read_nffft_pd.h \
- ../src/imaging/read_imaging.h ../src/recorder/read_recorder.h \
- ../src/pointsources/read_pointsources.h \
+ constants.h material/Cmat_types.h /usr/include/H5Cpp.h \
+ /usr/include/H5Include.h /usr/include/hdf5.h /usr/include/H5public.h \
+ /usr/include/H5pubconf.h /usr/include/H5version.h \
+ /usr/include/inttypes.h /usr/include/H5api_adpt.h \
+ /usr/include/H5Apublic.h /usr/include/H5Ipublic.h \
+ /usr/include/H5Opublic.h /usr/include/H5Lpublic.h \
+ /usr/include/H5Tpublic.h /usr/include/H5ACpublic.h \
+ /usr/include/H5Cpublic.h /usr/include/H5Dpublic.h \
+ /usr/include/H5Epublic.h /usr/include/H5Epubgen.h \
+ /usr/include/H5Fpublic.h /usr/include/H5FDpublic.h \
+ /usr/include/H5Gpublic.h /usr/include/H5MMpublic.h \
+ /usr/include/H5Ppublic.h /usr/include/H5Zpublic.h \
+ /usr/include/H5Rpublic.h /usr/include/H5Spublic.h \
+ /usr/include/H5FDcore.h /usr/include/H5FDfamily.h /usr/include/H5FDlog.h \
+ /usr/include/H5FDmpi.h /usr/include/H5FDmpio.h \
+ /usr/include/H5FDmpiposix.h /usr/include/H5FDmulti.h \
+ /usr/include/H5FDsec2.h /usr/include/H5FDstdio.h \
+ /usr/include/H5FDdirect.h /usr/include/H5Exception.h \
+ /usr/include/H5IdComponent.h /usr/include/H5DataSpace.h \
+ /usr/include/H5PropList.h /usr/include/H5Object.h \
+ /usr/include/H5Classes.h /usr/include/H5AbstractDs.h \
+ /usr/include/H5Attribute.h /usr/include/H5DcreatProp.h \
+ /usr/include/H5CommonFG.h /usr/include/H5DataType.h \
+ /usr/include/H5DxferProp.h /usr/include/H5FaccProp.h \
+ /usr/include/H5FcreatProp.h /usr/include/H5AtomType.h \
+ /usr/include/H5PredType.h /usr/include/H5EnumType.h \
+ /usr/include/H5IntType.h /usr/include/H5FloatType.h \
+ /usr/include/H5StrType.h /usr/include/H5CompType.h \
+ /usr/include/H5ArrayType.h /usr/include/H5VarLenType.h \
+ /usr/include/H5DataSet.h /usr/include/H5Group.h /usr/include/H5File.h \
+ /usr/include/H5Library.h ../src/main/read_global.h config/cfg_utils.h \
+ angora_excp.h headers.h /usr/include/libconfig.h++ \
+ ../src/material/read_mat.h ../src/main/read_geom.h \
+ ../src/main/read_basedirs.h ../src/main/read_multgridinfo.h \
+ ../src/shape/read_shapes.h ../src/waveforms/read_wfs.h \
+ ../src/tfsf/read_tfsf.h ../src/nffft/read_nffft_td.h \
+ ../src/nffft/read_nffft_pd.h ../src/imaging/read_imaging.h \
+ ../src/recorder/read_recorder.h ../src/pointsources/read_pointsources.h \
  ../src/estimator/read_logging_data.h ../src/main/parallel.h \
  ../src/main/init.h ../src/main/initgeom.h ../src/main/init_disp.h \
  ../src/update/update.h time_axis.h path_utils.h check_dispersion.h \
@@ -255,6 +218,7 @@ angora.lo: angora.cpp /usr/include/stdc-predef.h globals.h headers.h \
  /usr/include/boost/config/select_stdlib_config.hpp \
  /usr/include/c++/4.8/cstddef \
  /usr/include/boost/config/no_tr1/utility.hpp \
+ /usr/include/c++/4.8/utility /usr/include/c++/4.8/bits/stl_relops.h \
  /usr/include/boost/config/stdlib/libstdcpp3.hpp /usr/include/unistd.h \
  /usr/include/x86_64-linux-gnu/bits/posix_opt.h \
  /usr/include/x86_64-linux-gnu/bits/environments.h \
@@ -294,8 +258,10 @@ angora.lo: angora.cpp /usr/include/stdc-predef.h globals.h headers.h \
  /usr/include/c++/4.8/bits/stl_heap.h \
  /usr/include/boost/smart_ptr/detail/operator_bool.hpp \
  ../src/shape/Cshapes.h ../src/shape/Cshapes_excp.h \
- ../src/shape/Cshape_shared_ptr.h ../src/material/Cmats.h headers.h \
- ../src/material/Cmats_excp.h ../src/material/Cmat.h \
+ ../src/shape/Cshape_shared_ptr.h /usr/include/c++/4.8/map \
+ /usr/include/c++/4.8/bits/stl_tree.h /usr/include/c++/4.8/bits/stl_map.h \
+ /usr/include/c++/4.8/bits/stl_multimap.h ../src/material/Cmats.h \
+ headers.h ../src/material/Cmats_excp.h ../src/material/Cmat.h \
  ../src/material/Cmat_excp.h ../src/material/Cmat_types.h \
  ../src/waveforms/Cwfs.h ../src/waveforms/Cwfs_excp.h \
  waveforms/Cwf_shared_ptr.h ../src/pointsources/Cpointsources.h \
@@ -799,84 +765,6 @@ constants.h:
 
 material/Cmat_types.h:
 
-/usr/lib/openmpi/include/mpi.h:
-
-/usr/lib/openmpi/include/mpi_portable_platform.h:
-
-/usr/lib/openmpi/include/openmpi/ompi/mpi/cxx/mpicxx.h:
-
-/usr/include/c++/4.8/map:
-
-/usr/include/c++/4.8/bits/stl_tree.h:
-
-/usr/include/c++/4.8/bits/stl_map.h:
-
-/usr/include/c++/4.8/bits/stl_multimap.h:
-
-/usr/include/c++/4.8/utility:
-
-/usr/include/c++/4.8/bits/stl_relops.h:
-
-/usr/lib/openmpi/include/openmpi/ompi/mpi/cxx/constants.h:
-
-/usr/lib/openmpi/include/openmpi/ompi/mpi/cxx/functions.h:
-
-/usr/lib/openmpi/include/openmpi/ompi/mpi/cxx/datatype.h:
-
-/usr/lib/openmpi/include/openmpi/ompi/mpi/cxx/exception.h:
-
-/usr/lib/openmpi/include/openmpi/ompi/mpi/cxx/op.h:
-
-/usr/lib/openmpi/include/openmpi/ompi/mpi/cxx/status.h:
-
-/usr/lib/openmpi/include/openmpi/ompi/mpi/cxx/request.h:
-
-/usr/lib/openmpi/include/openmpi/ompi/mpi/cxx/group.h:
-
-/usr/lib/openmpi/include/openmpi/ompi/mpi/cxx/comm.h:
-
-/usr/lib/openmpi/include/openmpi/ompi/mpi/cxx/win.h:
-
-/usr/lib/openmpi/include/openmpi/ompi/mpi/cxx/file.h:
-
-/usr/lib/openmpi/include/openmpi/ompi/mpi/cxx/errhandler.h:
-
-/usr/lib/openmpi/include/openmpi/ompi/mpi/cxx/intracomm.h:
-
-/usr/lib/openmpi/include/openmpi/ompi/mpi/cxx/topology.h:
-
-/usr/lib/openmpi/include/openmpi/ompi/mpi/cxx/intercomm.h:
-
-/usr/lib/openmpi/include/openmpi/ompi/mpi/cxx/info.h:
-
-/usr/lib/openmpi/include/openmpi/ompi/mpi/cxx/datatype_inln.h:
-
-/usr/lib/openmpi/include/openmpi/ompi/mpi/cxx/functions_inln.h:
-
-/usr/lib/openmpi/include/openmpi/ompi/mpi/cxx/request_inln.h:
-
-/usr/lib/openmpi/include/openmpi/ompi/mpi/cxx/comm_inln.h:
-
-/usr/lib/openmpi/include/openmpi/ompi/mpi/cxx/intracomm_inln.h:
-
-/usr/lib/openmpi/include/openmpi/ompi/mpi/cxx/topology_inln.h:
-
-/usr/lib/openmpi/include/openmpi/ompi/mpi/cxx/intercomm_inln.h:
-
-/usr/lib/openmpi/include/openmpi/ompi/mpi/cxx/group_inln.h:
-
-/usr/lib/openmpi/include/openmpi/ompi/mpi/cxx/op_inln.h:
-
-/usr/lib/openmpi/include/openmpi/ompi/mpi/cxx/errhandler_inln.h:
-
-/usr/lib/openmpi/include/openmpi/ompi/mpi/cxx/status_inln.h:
-
-/usr/lib/openmpi/include/openmpi/ompi/mpi/cxx/info_inln.h:
-
-/usr/lib/openmpi/include/openmpi/ompi/mpi/cxx/win_inln.h:
-
-/usr/lib/openmpi/include/openmpi/ompi/mpi/cxx/file_inln.h:
-
 /usr/include/H5Cpp.h:
 
 /usr/include/H5Include.h:
@@ -1093,6 +981,10 @@ check_dispersion.h:
 
 /usr/include/boost/config/no_tr1/utility.hpp:
 
+/usr/include/c++/4.8/utility:
+
+/usr/include/c++/4.8/bits/stl_relops.h:
+
 /usr/include/boost/config/stdlib/libstdcpp3.hpp:
 
 /usr/include/unistd.h:
@@ -1184,6 +1076,14 @@ check_dispersion.h:
 ../src/shape/Cshapes_excp.h:
 
 ../src/shape/Cshape_shared_ptr.h:
+
+/usr/include/c++/4.8/map:
+
+/usr/include/c++/4.8/bits/stl_tree.h:
+
+/usr/include/c++/4.8/bits/stl_map.h:
+
+/usr/include/c++/4.8/bits/stl_multimap.h:
 
 ../src/material/Cmats.h:
 
