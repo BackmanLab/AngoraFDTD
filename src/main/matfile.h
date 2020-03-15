@@ -33,6 +33,20 @@ Copyright (C) 2006-2012  Ilker R. Capoglu
 
 #include <fstream>
 
+//#include "matlab.hpp"
+#include "extras.h" /* Aya sub functions */
+
+/* Aya */
+#include <mpi.h>     /* Aya MPI and MPI-IO live here */
+#include <stdio.h>   /* Aya all IO stuff lives here */
+#include <inttypes.h>
+#define MASTER_RANK 0
+#define TRUE 1
+#define FALSE 0
+#define BOOLEAN int /* aya */
+#define MBYTE 1048576
+#define DEBUG
+
 #ifndef ANGORA_MAX_NEWMAT
 #define ANGORA_MAX_NEWMAT 1000
 #endif
@@ -44,6 +58,8 @@ extern int rank;
 extern int iback,ifront;
 extern int jleft,jright;
 extern int klower,kupper;
+extern int nodes_x, nodes_y, nodes_z;
+//extern int NCELLS_X,NCELLS_Y,NCELLS_Z,NPML;
 
 //extern int num_of_distinct_eps_x,num_of_distinct_eps_y,num_of_distinct_eps_z;
 //extern int num_of_distinct_mu_x,num_of_distinct_mu_y,num_of_distinct_mu_z;
@@ -91,6 +107,8 @@ template<typename MatType> //data type for the material property
 void PlaceMaterialRegionFromFile(const string& MaterialFileName, const int& xPos, const int& yPos, const int& zPos, const string& anchor, const string& constitutive_param_type, const int& max_number_of_new_materials = ANGORA_MAX_NEWMAT, const_Cshape_shared_ptr shape_mask = const_Cshape_shared_ptr(new Cuniverse()))
 {//Reads rectangular-prism-shaped dielectric region from file and places into grid
 // (xPos,yPos,zPos) are the x-y-z coordinates of the anchor of the region (measured in cells from the back-left-lower corner of the grid)
+
+
 	if ((constitutive_param_type!="rel_permittivity")&&(constitutive_param_type!="rel_permeability")&&(constitutive_param_type!="electric_conductivity")&&(constitutive_param_type!="magnetic_conductivity")&&(constitutive_param_type!="lorentz_delta_epsilon"))
 	{
 #ifdef __GNUG__
@@ -104,24 +122,218 @@ void PlaceMaterialRegionFromFile(const string& MaterialFileName, const int& xPos
 			"(valid arguments are \"rel_permittivity\", \"rel_permeability\", \"electric_conductivity\", \"magnetic_conductivity\", and \"lorentz_delta_epsilon\")");
 	}
 
+  clock_t start;
+  double duration;
+  char *filename = const_cast<char*>(MaterialFileName.c_str());
 
-	ifstream MaterialFile;	//temporary ifstream object for reading the input
-	MaterialFile.open(MaterialFileName.c_str(),ios::binary);	//open file for reading
-	if (!MaterialFile)
-	{
-		cout << "Error opening material input file " << MaterialFileName << "." << endl << endl;
-		exit(-1);
-	}
-	int xExtentInCells,yExtentInCells,zExtentInCells;	//x, y and z extents of the material region (in cells)
-	MaterialFile.read((char*)&xExtentInCells,sizeof(xExtentInCells));	//read the x extent
-	MaterialFile.read((char*)&yExtentInCells,sizeof(yExtentInCells));	//read the y extent
-	MaterialFile.read((char*)&zExtentInCells,sizeof(zExtentInCells));	//read the z extent
+  if(rank==0){
+    cout << "Starting to read file: " << endl;
+    cout << "\t" << filename << endl;
+    start = clock();
+  }
 
-	//read through the file to determine the maximum and minumum constitutive parameter values
-	int pos_saved = MaterialFile.tellg();	//first, save the current position of the read pointer
-	MatType max_param=0;	//maximum constitutive parameter value
-	MatType min_param=1e20;	//minimum constitutive parameter value
-	MatType param_temp;	//constitutive parameter value that has been read
+	int xExtentInCells,yExtentInCells,zExtentInCells;	//x, y and z extents of the
+
+  // INSERT clean 3d MPI read code here
+
+  int filename_length;
+  int header_size = 3 * sizeof(int);
+  int total_size[header_size];
+  int NDIMS = 3;
+
+  int my_rank, pool_size, order, file_name_length,
+  array_of_distribs[NDIMS],
+  array_of_dargs[NDIMS], count, read_buffer_size;  // array_of_gsizes[NDIMS], , array_of_psizes[NDIMS],
+
+  double *read_buffer;
+  BOOLEAN i_am_the_master = FALSE, input_error = FALSE,
+  file_open_error = FALSE, file_write_error = FALSE, verbose = FALSE,
+  my_read_error = FALSE, read_error = FALSE;
+  char *file_name = NULL, message[BUFSIZ];
+
+  /* MPI variables */
+
+  MPI_Offset file_size;
+  MPI_File fh;
+  MPI_Status status;
+  MPI_Datatype file_type;
+  MPI_Aint file_type_extent;
+  int file_type_size;
+  int error_string_length;
+  char error_string[BUFSIZ];
+  extern int errno;
+
+
+  int array_of_psizes[] = {nodes_x, nodes_y, nodes_z};//{0,0,0};
+  MPI_Comm cartcomm;
+  int periods[] = {0, 0,0};  /// should be 1??
+  int pool_coords[NDIMS];
+  const int reorder = 1; /// should be 0??
+
+  // see: http://www.mcs.anl.gov/research/projects/mpi/usingmpi2/examples/moreio/subarray_c.htm
+  MPI_Comm_size(MPI_COMM_WORLD, &pool_size);
+  MPI_Cart_create(MPI_COMM_WORLD, NDIMS, array_of_psizes, periods, reorder, &cartcomm);
+  MPI_Comm_rank(cartcomm, &my_rank);//MPI_Comm_rank(cartcomm, &my_rank);
+  MPI_Cart_coords(cartcomm, my_rank, NDIMS, pool_coords);
+
+
+  if (my_rank == MASTER_RANK) i_am_the_master = TRUE;
+  //if (i_am_the_master) {
+  //filename = const_cast<char*>(MaterialFileName.c_str());
+  //}
+
+  file_open_error = MPI_File_open(MPI_COMM_WORLD, filename,
+            MPI_MODE_RDONLY, MPI_INFO_NULL, &fh);
+
+  if (file_open_error != MPI_SUCCESS) {
+    cout << "Error opening material input file " << MaterialFileName << "." << endl << endl;
+    exit(-1);
+  }
+
+//MPI_Barrier(MPI_COMM_WORLD); // this might not be necessary??
+
+  MPI_File_seek(fh, 0, MPI_SEEK_SET);
+  MPI_File_read(fh, total_size, header_size, MPI_INT, &status);
+  // TODO: try to cast the header values so you only have to do this once....
+  // something liek this: MPI_Bcast(&total_size, 3, MPI_INT, MASTER_RANK, MPI_COMM_WORLD);
+
+  xExtentInCells = total_size[0];
+  yExtentInCells = total_size[1];
+  zExtentInCells = total_size[2];
+
+  //now, read through the file again, determine the material index for each point, and update the material indices in the main grid
+  int material_offset;	//offset of the current material index beginning from the material index that was saved before the creation of new materials
+  int material_index_eps,material_index_cond_e,material_index_mu,material_index_cond_h,material_index_Omega_p;		//material indices at a given point
+
+  //calculate the coordinates of the back-left-lower corner of the region
+  int xCornerPos = xPos;
+  int yCornerPos = yPos;
+  int zCornerPos = zPos;
+  if ((anchor!="center")&&(anchor!="BLU")&&(anchor!="BLL")&&(anchor!="BRU")&&(anchor!="BRL")
+                &&(anchor!="FLU")&&(anchor!="FLL")&&(anchor!="FRU")&&(anchor!="FRL"))
+  {
+    if (rank==0)
+    {
+      cout << "Invalid anchor point \"" << anchor << "\" for material input file " << MaterialFileName << " in node " << rank << endl << endl;
+      exit(-1);
+    }
+  }
+
+  if (anchor=="center")
+  {
+    xCornerPos = (int)floor(xPos-xExtentInCells/2.0);	//shift reference to the center
+    yCornerPos = (int)floor(yPos-yExtentInCells/2.0);	//shift reference to the center
+    zCornerPos = (int)floor(zPos-zExtentInCells/2.0);	//shift reference to the center
+  }
+  else if (anchor=="BLL")	//back-left-lower
+  {
+    //reference point is the back-left-lower corner by default
+  }
+  else if (anchor=="BLU")	//back-left-upper
+  {
+    zCornerPos = zPos - zExtentInCells;	//shift reference to the upper corner
+  }
+  else if (anchor=="BRL")	//back-right-lower
+  {
+    yCornerPos = yPos - yExtentInCells;	//shift reference to the right corner
+  }
+  else if (anchor=="BRU")	//back-right-upper
+  {
+    yCornerPos = yPos - yExtentInCells;	//shift reference to the right corner
+    zCornerPos = zPos - zExtentInCells;	//shift reference to the upper corner
+  }
+  else if (anchor=="FLL")	//front-left-lower
+  {
+    xCornerPos = xPos - xExtentInCells;	//shift reference to the front corner
+  }
+  else if (anchor=="FLU")	//front-left-upper
+  {
+    xCornerPos = xPos - xExtentInCells;	//shift reference to the front corner
+    zCornerPos = zPos - zExtentInCells;	//shift reference to the upper corner
+  }
+  else if (anchor=="FRL")	//front-right-lower
+  {
+    xCornerPos = xPos - xExtentInCells;	//shift reference to the front corner
+    yCornerPos = yPos - yExtentInCells;	//shift reference to the right corner
+  }
+  else if (anchor=="FRU")	//front-right-upper
+  {
+    xCornerPos = xPos - xExtentInCells;	//shift reference to the front corner
+    yCornerPos = yPos - yExtentInCells;	//shift reference to the right corner
+    zCornerPos = zPos - zExtentInCells;	//shift reference to the upper corner
+  }
+
+  //indices of the cell at the back-left-lower corner
+  //these are simply equal to the coordinates of the back-left-lower corner plus one
+  int xCornerCell = xCornerPos+1;
+  int yCornerCell = yCornerPos+1;
+  int zCornerCell = zCornerPos+1;
+
+
+    /* Prepare for calling MPI_Type_create_darray */
+  int array_of_gsizes[] = {xExtentInCells, yExtentInCells, zExtentInCells};
+
+  for (int ii = 0; ii < NDIMS; ii++) {  // 3 dimensions
+    array_of_distribs[ii] = MPI_DISTRIBUTE_BLOCK;
+    array_of_dargs[ii]    = MPI_DISTRIBUTE_DFLT_DARG;
+  }
+
+
+  int iback3[3]  = {max(iback,xCornerCell), max(iback,xCornerCell), max(iback,xCornerCell)};
+  int ifront3[3] = {min(ifront,xCornerCell + xExtentInCells-1),min(ifront+1,xCornerCell+xExtentInCells-1), min(ifront+1,xCornerCell+xExtentInCells-1)};
+  int jleft3[3]  = {max(yCornerCell, jleft), max(yCornerCell, jleft), max(yCornerCell, jleft)};
+  int jright3[3] = {min(yCornerCell + yExtentInCells-1, jright+1), min(yCornerCell + yExtentInCells-1, jright), min(yCornerCell + yExtentInCells-1, jright+1)};
+  int klower3[3] = {max(zCornerCell, klower), max(zCornerCell, klower), max(zCornerCell, klower)};
+  int kupper3[3] = {min(zCornerCell + zExtentInCells-1,kupper+1), min(zCornerCell + zExtentInCells-1,kupper+1), min(zCornerCell + zExtentInCells-1,kupper)};
+
+
+  // Each parallel sub block overlaps its neigh by one. We check here if we can expand the size
+  int subSize[] = {total_size[0] / array_of_psizes[0],
+                   total_size[1] / array_of_psizes[1],
+                   total_size[2] / array_of_psizes[2]};
+
+
+   // always the same. dependent only on pool
+   int start_indices[] = {min(max(iback-xCornerCell,0), xExtentInCells-1),
+                          min(max(jleft-yCornerCell,0), yExtentInCells-1),
+                          min(max(klower-zCornerCell,0),zExtentInCells-1)};
+
+  // the read out is always one pixel bigger, and sometimes more (at edges) than size when divied evenly between pools
+  int subSizeExtended[] = {min(max(maxSize(iback3, ifront3, NDIMS),3), total_size[0] - start_indices[0]),
+                           min(max(maxSize(jleft3, jright3, NDIMS),3), total_size[1] - start_indices[1]),
+                           min(max(maxSize(klower3, kupper3, NDIMS),3), total_size[2] - start_indices[2])};
+
+
+// global indices pertain to i,j,k position in global coordinate system
+  int start_indices_global[] = {min(iback3[0], min(iback3[1], iback3[2])) - 1,
+                                min(jleft3[0], min(jleft3[1], jleft3[2])) - 1,
+                                min(klower3[0], min(klower3[1], klower3[2])) - 1};
+
+  MPI_Type_create_subarray(NDIMS, array_of_gsizes, subSizeExtended, start_indices,
+                       MPI_ORDER_FORTRAN, MPI_DOUBLE, &file_type);
+  MPI_Type_commit(&file_type);
+  MPI_Type_size(file_type, &file_type_size);
+  read_buffer_size = ( file_type_size ) / sizeof(double); // was int
+  read_buffer = (double*) malloc(read_buffer_size * sizeof(double));
+
+
+  MPI_File_set_view(fh, header_size, MPI_DOUBLE, file_type, "native", MPI_INFO_NULL);
+  MPI_File_read_all(fh, read_buffer, read_buffer_size, MPI_DOUBLE, &status);
+
+
+  // read in the global min and max
+  double maxV = find_max(read_buffer, read_buffer_size); //read_buffer[0];
+  double minV = find_min(read_buffer, read_buffer_size);//read_buffer[0];
+  double globalMax;
+  double globalMin;
+  int recvcounts[] = {1};
+
+  MPI_Reduce(&minV, &globalMin, 1, MPI_DOUBLE, MPI_MIN, 0,  MPI_COMM_WORLD);
+  MPI_Reduce(&maxV, &globalMax, 1, MPI_DOUBLE, MPI_MAX, 0,  MPI_COMM_WORLD);
+
+  MPI_Bcast(&globalMin, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+  MPI_Bcast(&globalMax, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+
 	double param_lower_limit; //lower limit of the constitutive parameter
 	if ((constitutive_param_type=="rel_permittivity")||(constitutive_param_type=="rel_permeability"))
 	{
@@ -135,22 +347,12 @@ void PlaceMaterialRegionFromFile(const string& MaterialFileName, const int& xPos
 	{
 		throw AngoraDeveloperException("Error in PlaceMaterialRegionFromFile: unknown constitutive parameter type");
 	}
-	for (int i=1; i<=xExtentInCells; i++)
-	{
-		for (int j=1; j<=yExtentInCells; j++)
-		{
-			for (int k=1; k<=zExtentInCells; k++)
-			{
-				MaterialFile.read((char*)&param_temp,sizeof(param_temp));	//read the constitutive parameter
-				if (param_temp>=param_lower_limit)
-				{//if the value is nonpositive, don't bother with it at all
-					if (param_temp>max_param) max_param=param_temp;	//update the maximum constitutive parameter
-					if (param_temp<min_param) min_param=param_temp;	//update the minimum constitutive parameter
-				}
-			}
-		}
-	}
-	//maximum number of different material types that can be extracted from the region
+
+// TODO: GET and share all min/max to other processors - for now we will hard code it.
+	MatType max_param = globalMax; // 0;	//maximum constitutive parameter value -- TODO: HARDCODE THE TRUE VALUES
+	MatType min_param = globalMin;// 1e20;	//minimum constitutive parameter value -- TODO: HARDCODE THE TRUE VALUES
+
+  //maximum number of different material types that can be extracted from the region
 //	int max_num_of_materials = 1000; 	//pretty random, may have to find a more efficient way in the future
 	//minimum difference in constitutive parameter between different materials
 	MatType param_step = (max_param-min_param)/(max_number_of_new_materials-1);
@@ -171,8 +373,11 @@ void PlaceMaterialRegionFromFile(const string& MaterialFileName, const int& xPos
 	int material_index_saved_Omega_p_x = Omega_p_x.size()-1;
 	int material_index_saved_Omega_p_y = Omega_p_y.size()-1;
 	int material_index_saved_Omega_p_z = Omega_p_z.size()-1;
+
+
 	//dummy material index
 	Cmat NewMaterial;
+
 	if ((constitutive_param_type=="rel_permittivity"))
 	{//the relative permittivity of the new material is min_param+(i-1)*param_step
 		for (int i=1; i<=max_number_of_new_materials; i++)
@@ -208,508 +413,301 @@ void PlaceMaterialRegionFromFile(const string& MaterialFileName, const int& xPos
 			NewMaterial.set_Omega_p(min_param+(i-1)*param_step);
 		}
 	}
-	//cout<<Omega_p_x<<endl;
-	MaterialFile.seekg(pos_saved,ios::beg);	//return to the saved position in the file
+  // So we have different limits based on if we are assigning the X, Y or Z Field components
+  // we also have limits based on the x,y,z local position in the grid
+  // eg. iback3 - is the x starting position for [X field, Y field and Z field]
+  // at each we point, we need to check
+/*
+ofstream myfile1;
+if(rank<20){
+  printf("OPENING FILE...\n");
+  myfile1.open("Debugging_MPI_tessst.txt",ios::app);
+}*/
 
-	//now, read through the file again, determine the material index for each point, and update the material indices in the main grid
-	int material_offset;	//offset of the current material index beginning from the material index that was saved before the creation of new materials
-	int material_index_eps,material_index_cond_e,material_index_mu,material_index_cond_h,material_index_Omega_p;		//material indices at a given point
+  int *temp;
+  int i, j, k;
 
-	//calculate the coordinates of the back-left-lower corner of the region
-	int xCornerPos=xPos;
-	int yCornerPos=yPos;
-	int zCornerPos=zPos;
-	if ((anchor!="center")&&(anchor!="BLU")&&(anchor!="BLL")&&(anchor!="BRU")&&(anchor!="BRL")
-	   					  &&(anchor!="FLU")&&(anchor!="FLL")&&(anchor!="FRU")&&(anchor!="FRL"))
-	{
-		if (rank==0)
-		{
-			cout << "Invalid anchor point \"" << anchor << "\" for material input file " << MaterialFileName << " in node " << rank << endl << endl;
-			exit(-1);
-		}
-	}
+  MatType param_temp;	//constitutive parameter value that has been read
+  for(int index = 0; index < read_buffer_size; index++ ){
+    temp = ind2sub(subSizeExtended, index);
+    i = start_indices_global[0] + temp[0] + 1; // 1 indexing
+    j = start_indices_global[1] + temp[1] + 1; // 1 indexing
+    k = start_indices_global[2] + temp[2] + 1; // 1 indexing
+    param_temp = read_buffer[index];
 
-	if (anchor=="center")
-	{
-		xCornerPos = (int)floor(xPos-xExtentInCells/2.0);	//shift reference to the center
-		yCornerPos = (int)floor(yPos-yExtentInCells/2.0);	//shift reference to the center
-		zCornerPos = (int)floor(zPos-zExtentInCells/2.0);	//shift reference to the center
-	}
-	else if (anchor=="BLL")	//back-left-lower
-	{
-		//reference point is the back-left-lower corner by default
-	}
-	else if (anchor=="BLU")	//back-left-upper
-	{
-		zCornerPos = zPos - zExtentInCells;	//shift reference to the upper corner
-	}
-	else if (anchor=="BRL")	//back-right-lower
-	{
-		yCornerPos = yPos - yExtentInCells;	//shift reference to the right corner
-	}
-	else if (anchor=="BRU")	//back-right-upper
-	{
-		yCornerPos = yPos - yExtentInCells;	//shift reference to the right corner
-		zCornerPos = zPos - zExtentInCells;	//shift reference to the upper corner
-	}
-	else if (anchor=="FLL")	//front-left-lower
-	{
-		xCornerPos = xPos - xExtentInCells;	//shift reference to the front corner
-	}
-	else if (anchor=="FLU")	//front-left-upper
-	{
-		xCornerPos = xPos - xExtentInCells;	//shift reference to the front corner
-		zCornerPos = zPos - zExtentInCells;	//shift reference to the upper corner
-	}
-	else if (anchor=="FRL")	//front-right-lower
-	{
-		xCornerPos = xPos - xExtentInCells;	//shift reference to the front corner
-		yCornerPos = yPos - yExtentInCells;	//shift reference to the right corner
-	}
-	else if (anchor=="FRU")	//front-right-upper
-	{
-		xCornerPos = xPos - xExtentInCells;	//shift reference to the front corner
-		yCornerPos = yPos - yExtentInCells;	//shift reference to the right corner
-		zCornerPos = zPos - zExtentInCells;	//shift reference to the upper corner
-	}
+    /*
+    if(rank<20){
+      myfile1 << my_rank << ": X: " << param_temp << " -> " << "[" <<
+              i << ", " << j << ", " << k << "]""\n";
+    }*/
 
-	//indices of the cell at the back-left-lower corner
-	//these are simply equal to the coordinates of the back-left-lower corner plus one
-	int xCornerCell = xCornerPos+1;
-	int yCornerCell = yCornerPos+1;
-	int zCornerCell = zCornerPos+1;
+    if (constitutive_param_type == "rel_permittivity"){
+      if(isWithinBounds(i, iback3[0],  ifront3[0]) &&
+         isWithinBounds(j, jleft3[0],  jright3[0]) &&
+         isWithinBounds(k, klower3[0], kupper3[0])){
+          // set x fields of rel-permittivity
+/*
+          if(rank==0){
+            myfile1 << my_rank << ": X: " << param_temp << " -> " << "[" <<
+                    i << ", " << j << ", " << k << "]""\n";
+          }
+*/
+          material_offset = (int)((param_temp-min_param)/(max_param-min_param)*(max_number_of_new_materials-1));
+          //material_offset is between 0 and (max_number_of_new_materials-1)  (both included)
+          material_index_eps = material_index_saved_eps_x + (material_offset + 1);	//this is the absolute index in the current material list
+                                            // +1 because of the range of material_offset above
+          //place material at the center of the cell
+          eps_x_indices(i,j,k) = material_index_eps;
+          Ca_X(i,j,k)=(1-dt*cond_e_x(cond_e_x_indices(i,j,k))/(2.0*eps_x(eps_x_indices(i,j,k))*epsilon_0))/(1+dt*cond_e_x(cond_e_x_indices(i,j,k))/(2.0*eps_x(eps_x_indices(i,j,k))*epsilon_0));
+          Cb_X(i,j,k)=dt/eps_x(eps_x_indices(i,j,k))/epsilon_0/dx/(1+dt*cond_e_x(cond_e_x_indices(i,j,k))/(2.0*eps_x(eps_x_indices(i,j,k))*epsilon_0));
+      }
+      if(isWithinBounds(i, iback3[1],  ifront3[1]) &&
+         isWithinBounds(j, jleft3[1],  jright3[1]) &&
+         isWithinBounds(k, klower3[1], kupper3[1])){
+          // set y fields of rel-permittivity
+          material_offset = (int)((param_temp-min_param)/(max_param-min_param)*(max_number_of_new_materials-1));
+          //material_offset is between 0 and (max_number_of_new_materials-1)  (both included)
+          material_index_eps = material_index_saved_eps_y + (material_offset + 1);	//this is the absolute index in the current material list
+                                            // +1 because of the range of material_offset above
+          //place material on the lower side of the cell
+          eps_y_indices(i,j,k) = material_index_eps;
+          Ca_Y(i,j,k)=(1-dt*cond_e_y(cond_e_y_indices(i,j,k))/(2.0*eps_y(eps_y_indices(i,j,k))*epsilon_0))/(1+dt*cond_e_y(cond_e_y_indices(i,j,k))/(2.0*eps_y(eps_y_indices(i,j,k))*epsilon_0));
+          Cb_Y(i,j,k)=dt/eps_y(eps_y_indices(i,j,k))/epsilon_0/dx/(1+dt*cond_e_y(cond_e_y_indices(i,j,k))/(2.0*eps_y(eps_y_indices(i,j,k))*epsilon_0));
 
-	//every node has to read the file, and update the necessary portions of their grid
-	Array<MatType,1> material_row(Range(xCornerCell,xCornerCell+xExtentInCells-1));	//temporary array of size xExtentInCells that will hold the constitutive parameter values belonging to a x-row in the 2-D material property array in the file
-	// Note that the x-y-z dimensions are written in this order in the file. Therefore, the x-rows are read first.
+      }
+      if(isWithinBounds(i, iback3[2],  ifront3[2]) &&
+         isWithinBounds(j, jleft3[2],  jright3[2]) &&
+         isWithinBounds(k, klower3[2], kupper3[2])){
+         // set z fields of rel-permittivity
+         material_offset = (int)((param_temp-min_param)/(max_param-min_param)*(max_number_of_new_materials-1));
+         //material_offset is between 0 and (max_number_of_new_materials-1)  (both included)
+         material_index_eps = material_index_saved_eps_z + (material_offset + 1);	//this is the absolute index in the current material list
+                                           // +1 because of the range of material_offset above
+         //place material on the left side of the cell
+         eps_z_indices(i,j,k) = material_index_eps;
+         Ca_Z(i,j,k)=(1-dt*cond_e_z(cond_e_z_indices(i,j,k))/(2.0*eps_z(eps_z_indices(i,j,k))*epsilon_0))/(1+dt*cond_e_z(cond_e_z_indices(i,j,k))/(2.0*eps_z(eps_z_indices(i,j,k))*epsilon_0));
+         Cb_Z(i,j,k)=dt/eps_z(eps_z_indices(i,j,k))/epsilon_0/dx/(1+dt*cond_e_z(cond_e_z_indices(i,j,k))/(2.0*eps_z(eps_z_indices(i,j,k))*epsilon_0));
+      }
+    }
+    else if (constitutive_param_type == "electric_conductivity"){
+      if(isWithinBounds(i, iback3[0],  ifront3[0]) &&
+         isWithinBounds(j, jleft3[0],  jright3[0]) &&
+         isWithinBounds(k, klower3[0], kupper3[0])){
+          // set x fields of electric_conductivity
+          material_offset = (int)((param_temp-min_param)/(max_param-min_param)*(max_number_of_new_materials-1));
+          //material_offset is between 0 and (max_number_of_new_materials-1)  (both included)
+          material_index_cond_e = material_index_saved_cond_e_x + (material_offset + 1);	//this is the absolute index in the current material list
+                                            // +1 because of the range of material_offset above
+          //place material at the center of the cell
+          cond_e_x_indices(i,j,k) = material_index_cond_e;
+          Ca_X(i,j,k)=(1-dt*cond_e_x(cond_e_x_indices(i,j,k))/(2.0*eps_x(eps_x_indices(i,j,k))*epsilon_0))/(1+dt*cond_e_x(cond_e_x_indices(i,j,k))/(2.0*eps_x(eps_x_indices(i,j,k))*epsilon_0));
+          Cb_X(i,j,k)=dt/eps_x(eps_x_indices(i,j,k))/epsilon_0/dx/(1+dt*cond_e_x(cond_e_x_indices(i,j,k))/(2.0*eps_x(eps_x_indices(i,j,k))*epsilon_0));
+      }
+      if(isWithinBounds(i, iback3[1],  ifront3[1]) &&
+         isWithinBounds(j, jleft3[1],  jright3[1]) &&
+         isWithinBounds(k, klower3[1], kupper3[1])){
+          // set y fields of electric_conductivity
+          material_offset = (int)((param_temp-min_param)/(max_param-min_param)*(max_number_of_new_materials-1));
+          //material_offset is between 0 and (max_number_of_new_materials-1)  (both included)
+          material_index_cond_e = material_index_saved_cond_e_y + (material_offset + 1);	//this is the absolute index in the current material list
+                                            // +1 because of the range of material_offset above
+          //place material on the lower side of the cell
+          cond_e_y_indices(i,j,k) = material_index_cond_e;
+          Ca_Y(i,j,k)=(1-dt*cond_e_y(cond_e_y_indices(i,j,k))/(2.0*eps_y(eps_y_indices(i,j,k))*epsilon_0))/(1+dt*cond_e_y(cond_e_y_indices(i,j,k))/(2.0*eps_y(eps_y_indices(i,j,k))*epsilon_0));
+          Cb_Y(i,j,k)=dt/eps_y(eps_y_indices(i,j,k))/epsilon_0/dx/(1+dt*cond_e_y(cond_e_y_indices(i,j,k))/(2.0*eps_y(eps_y_indices(i,j,k))*epsilon_0));
+      }
+      if(isWithinBounds(i, iback3[2],  ifront3[2]) &&
+         isWithinBounds(j, jleft3[2],  jright3[2]) &&
+         isWithinBounds(k, klower3[2], kupper3[2])){
+         // set z fields of electric_conductivity
 
-	if (constitutive_param_type=="rel_permittivity")
-	{
-		for (int k=zCornerCell; k<=zCornerCell+zExtentInCells-1; k++)
-		{
-			for (int j=yCornerCell; j<=yCornerCell+yExtentInCells-1; j++)
-			{
-				MaterialFile.read((char*)material_row.data(),xExtentInCells*sizeof(material_row(0)));	//read the constitutive parameter x-row into temporary array
-				if ((k>=klower)&&(k<=kupper+1)&&(j>=jleft)&&(j<=jright+1))
-				{
-					for (int i=max(iback,xCornerCell); i<=min(ifront,xCornerCell+xExtentInCells-1); i++)
-					{
-						param_temp = material_row(i);
-						if (shape_mask->IsInside(i-0.5,j-1,k-1))
-						{
-							if (param_temp>=min_param)
-							{//if the value is nonpositive, don't bother with it at all
-								material_offset = (int)((param_temp-min_param)/(max_param-min_param)*(max_number_of_new_materials-1));
-								//material_offset is between 0 and (max_number_of_new_materials-1)  (both included)
-								material_index_eps = material_index_saved_eps_x + (material_offset + 1);	//this is the absolute index in the current material list
-																									// +1 because of the range of material_offset above
-								//place material at the center of the cell
-								eps_x_indices(i,j,k) = material_index_eps;
-								Ca_X(i,j,k)=(1-dt*cond_e_x(cond_e_x_indices(i,j,k))/(2.0*eps_x(eps_x_indices(i,j,k))*epsilon_0))/(1+dt*cond_e_x(cond_e_x_indices(i,j,k))/(2.0*eps_x(eps_x_indices(i,j,k))*epsilon_0));
-								Cb_X(i,j,k)=dt/eps_x(eps_x_indices(i,j,k))/epsilon_0/dx/(1+dt*cond_e_x(cond_e_x_indices(i,j,k))/(2.0*eps_x(eps_x_indices(i,j,k))*epsilon_0));
-							}
-						}
-					}
-				}
+         material_offset = (int)((param_temp-min_param)/(max_param-min_param)*(max_number_of_new_materials-1));
+         //material_offset is between 0 and (max_number_of_new_materials-1)  (both included)
+         material_index_cond_e = material_index_saved_cond_e_z + (material_offset + 1);	//this is the absolute index in the current material list
+                                           // +1 because of the range of material_offset above
+         //place material on the left side of the cell
+         cond_e_z_indices(i,j,k) = material_index_cond_e;
+         Ca_Z(i,j,k)=(1-dt*cond_e_z(cond_e_z_indices(i,j,k))/(2.0*eps_z(eps_z_indices(i,j,k))*epsilon_0))/(1+dt*cond_e_z(cond_e_z_indices(i,j,k))/(2.0*eps_z(eps_z_indices(i,j,k))*epsilon_0));
+         Cb_Z(i,j,k)=dt/eps_z(eps_z_indices(i,j,k))/epsilon_0/dx/(1+dt*cond_e_z(cond_e_z_indices(i,j,k))/(2.0*eps_z(eps_z_indices(i,j,k))*epsilon_0));
+      }
+    }
+    else if (constitutive_param_type == "rel_permeability"){
+      if(isWithinBounds(i, iback3[0],  ifront3[0]) &&
+         isWithinBounds(j, jleft3[0],  jright3[0]) &&
+         isWithinBounds(k, klower3[0], kupper3[0])){
+          // set x fields of rel_permeability
+          material_offset = (int)((param_temp-min_param)/(max_param-min_param)*(max_number_of_new_materials-1));
+          //material_offset is between 0 and (max_number_of_new_materials-1)  (both included)
+          material_index_mu = material_index_saved_mu_x + (material_offset + 1);	//this is the absolute index in the current material list
+                                            // +1 because of the range of material_offset above
+          //place material at the center of the cell
+          mu_x_indices(i,j,k) = material_index_mu;
+          Da_X(i,j,k)=(1-dt*cond_h_x(cond_h_x_indices(i,j,k))/(2.0*mu_x(mu_x_indices(i,j,k))*mu_0))/(1+dt*cond_h_x(cond_h_x_indices(i,j,k))/(2.0*mu_x(mu_x_indices(i,j,k))*mu_0));
+          Db_X(i,j,k)=dt/mu_x(mu_x_indices(i,j,k))/mu_0/dx/(1+dt*cond_h_x(cond_h_x_indices(i,j,k))/(2.0*mu_x(mu_x_indices(i,j,k))*mu_0));
+      }
+      if(isWithinBounds(i, iback3[1],  ifront3[1]) &&
+         isWithinBounds(j, jleft3[1],  jright3[1]) &&
+         isWithinBounds(k, klower3[1], kupper3[1])){
+          // set y fields of rel_permeability
+          material_offset = (int)((param_temp-min_param)/(max_param-min_param)*(max_number_of_new_materials-1));
+          //material_offset is between 0 and (max_number_of_new_materials-1)  (both included)
+          material_index_mu = material_index_saved_mu_y + (material_offset + 1);	//this is the absolute index in the current material list
+                                            // +1 because of the range of material_offset above
+          //place material on the lower side of the cell
+          mu_y_indices(i,j,k) = material_index_mu;
+          Da_Y(i,j,k)=(1-dt*cond_h_y(cond_h_y_indices(i,j,k))/(2.0*mu_y(mu_y_indices(i,j,k))*mu_0))/(1+dt*cond_h_y(cond_h_y_indices(i,j,k))/(2.0*mu_y(mu_y_indices(i,j,k))*mu_0));
+          Db_Y(i,j,k)=dt/mu_y(mu_y_indices(i,j,k))/mu_0/dx/(1+dt*cond_h_y(cond_h_y_indices(i,j,k))/(2.0*mu_y(mu_y_indices(i,j,k))*mu_0));
+      }
+      if(isWithinBounds(i, iback3[2],  ifront3[2]) &&
+         isWithinBounds(j, jleft3[2],  jright3[2]) &&
+         isWithinBounds(k, klower3[2], kupper3[2])){
+        // set z fields of rel_permeability
+         material_offset = (int)((param_temp-min_param)/(max_param-min_param)*(max_number_of_new_materials-1));
+         //material_offset is between 0 and (max_number_of_new_materials-1)  (both included)
+         material_index_mu = material_index_saved_mu_z + (material_offset + 1);	//this is the absolute index in the current material list
+                                           // +1 because of the range of material_offset above
+         //place material on the left side of the cell
+         mu_z_indices(i,j,k) = material_index_mu;
+         Da_Z(i,j,k)=(1-dt*cond_h_z(cond_h_z_indices(i,j,k))/(2.0*mu_z(mu_z_indices(i,j,k))*mu_0))/(1+dt*cond_h_z(cond_h_z_indices(i,j,k))/(2.0*mu_z(mu_z_indices(i,j,k))*mu_0));
+         Db_Z(i,j,k)=dt/mu_z(mu_z_indices(i,j,k))/mu_0/dx/(1+dt*cond_h_z(cond_h_z_indices(i,j,k))/(2.0*mu_z(mu_z_indices(i,j,k))*mu_0));
+      }
+    }
+    else if (constitutive_param_type == "magnetic_conductivity"){
+      if(isWithinBounds(i, iback3[0],  ifront3[0]) &&
+         isWithinBounds(j, jleft3[0],  jright3[0]) &&
+         isWithinBounds(k, klower3[0], kupper3[0])){
+          // set x fields of magnetic_conductivity
+          material_offset = (int)((param_temp-min_param)/(max_param-min_param)*(max_number_of_new_materials-1));
+          //material_offset is between 0 and (max_number_of_new_materials-1)  (both included)
+          material_index_cond_h = material_index_saved_cond_h_x + (material_offset + 1);	//this is the absolute index in the current material list
+                                            // +1 because of the range of material_offset above
+          //place material at the center of the cell
+          cond_h_x_indices(i,j,k) = material_index_cond_h;
+          Da_X(i,j,k)=(1-dt*cond_h_x(cond_h_x_indices(i,j,k))/(2.0*mu_x(mu_x_indices(i,j,k))*mu_0))/(1+dt*cond_h_x(cond_h_x_indices(i,j,k))/(2.0*mu_x(mu_x_indices(i,j,k))*mu_0));
+          Db_X(i,j,k)=dt/mu_x(mu_x_indices(i,j,k))/mu_0/dx/(1+dt*cond_h_x(cond_h_x_indices(i,j,k))/(2.0*mu_x(mu_x_indices(i,j,k))*mu_0));
+      }
+      if(isWithinBounds(i, iback3[1],  ifront3[1]) &&
+         isWithinBounds(j, jleft3[1],  jright3[1]) &&
+         isWithinBounds(k, klower3[1], kupper3[1])){
+          // set y fields of magnetic_conductivity
+          material_offset = (int)((param_temp-min_param)/(max_param-min_param)*(max_number_of_new_materials-1));
+          //material_offset is between 0 and (max_number_of_new_materials-1)  (both included)
+          material_index_cond_h = material_index_saved_cond_h_y + (material_offset + 1);	//this is the absolute index in the current material list
+                                            // +1 because of the range of material_offset above
+          //place material on the lower side of the cell
+          cond_h_y_indices(i,j,k) = material_index_cond_h;
+          Da_Y(i,j,k)=(1-dt*cond_h_y(cond_h_y_indices(i,j,k))/(2.0*mu_y(mu_y_indices(i,j,k))*mu_0))/(1+dt*cond_h_y(cond_h_y_indices(i,j,k))/(2.0*mu_y(mu_y_indices(i,j,k))*mu_0));
+          Db_Y(i,j,k)=dt/mu_y(mu_y_indices(i,j,k))/mu_0/dx/(1+dt*cond_h_y(cond_h_y_indices(i,j,k))/(2.0*mu_y(mu_y_indices(i,j,k))*mu_0));
+      }
+      if(isWithinBounds(i, iback3[2],  ifront3[2]) &&
+         isWithinBounds(j, jleft3[2],  jright3[2]) &&
+         isWithinBounds(k, klower3[2], kupper3[2])){
+             // set z fields of magnetic_conductivity
 
-				if ((k>=klower)&&(k<=kupper+1)&&(j>=jleft)&&(j<=jright))
-				{
-					for (int i=max(iback,xCornerCell); i<=min(ifront+1,xCornerCell+xExtentInCells-1); i++)
-					{
-						param_temp = material_row(i);
-						if (shape_mask->IsInside(i-1,j-0.5,k-1))
-						{
-							if (param_temp>=min_param)
-							{//if the value is nonpositive, don't bother with it at all
-								material_offset = (int)((param_temp-min_param)/(max_param-min_param)*(max_number_of_new_materials-1));
-								//material_offset is between 0 and (max_number_of_new_materials-1)  (both included)
-								material_index_eps = material_index_saved_eps_y + (material_offset + 1);	//this is the absolute index in the current material list
-																									// +1 because of the range of material_offset above
-								//place material on the lower side of the cell
-								eps_y_indices(i,j,k) = material_index_eps;
-								Ca_Y(i,j,k)=(1-dt*cond_e_y(cond_e_y_indices(i,j,k))/(2.0*eps_y(eps_y_indices(i,j,k))*epsilon_0))/(1+dt*cond_e_y(cond_e_y_indices(i,j,k))/(2.0*eps_y(eps_y_indices(i,j,k))*epsilon_0));
-								Cb_Y(i,j,k)=dt/eps_y(eps_y_indices(i,j,k))/epsilon_0/dx/(1+dt*cond_e_y(cond_e_y_indices(i,j,k))/(2.0*eps_y(eps_y_indices(i,j,k))*epsilon_0));
-							}
-						}
-					}
-				}
+         material_offset = (int)((param_temp-min_param)/(max_param-min_param)*(max_number_of_new_materials-1));
+         //material_offset is between 0 and (max_number_of_new_materials-1)  (both included)
+         material_index_cond_h = material_index_saved_cond_h_z + (material_offset + 1);	//this is the absolute index in the current material list
+                                           // +1 because of the range of material_offset above
+         //place material on the left side of the cell
+         cond_h_z_indices(i,j,k) = material_index_cond_h;
+         Da_Z(i,j,k)=(1-dt*cond_h_z(cond_h_z_indices(i,j,k))/(2.0*mu_z(mu_z_indices(i,j,k))*mu_0))/(1+dt*cond_h_z(cond_h_z_indices(i,j,k))/(2.0*mu_z(mu_z_indices(i,j,k))*mu_0));
+         Db_Z(i,j,k)=dt/mu_z(mu_z_indices(i,j,k))/mu_0/dx/(1+dt*cond_h_z(cond_h_z_indices(i,j,k))/(2.0*mu_z(mu_z_indices(i,j,k))*mu_0));
+      }
+    }
+    else if (constitutive_param_type == "lorentz_delta_epsilon"){
+      if(isWithinBounds(i, iback3[0],  ifront3[0]) &&
+         isWithinBounds(j, jleft3[0],  jright3[0]) &&
+         isWithinBounds(k, klower3[0], kupper3[0])){
+          // set x fields of lorentz_delta_epsilon
 
-				if ((k>=klower)&&(k<=kupper)&&(j>=jleft)&&(j<=jright+1))
-				{
-					for (int i=max(iback,xCornerCell); i<=min(ifront+1,xCornerCell+xExtentInCells-1); i++)
-					{
-						param_temp = material_row(i);
-						if (shape_mask->IsInside(i-1,j-1,k-0.5))
-						{
-							if (param_temp>=min_param)
-							{//if the value is nonpositive, don't bother with it at all
-								material_offset = (int)((param_temp-min_param)/(max_param-min_param)*(max_number_of_new_materials-1));
-								//material_offset is between 0 and (max_number_of_new_materials-1)  (both included)
-								material_index_eps = material_index_saved_eps_z + (material_offset + 1);	//this is the absolute index in the current material list
-																									// +1 because of the range of material_offset above
-								//place material on the left side of the cell
-								eps_z_indices(i,j,k) = material_index_eps;
-								Ca_Z(i,j,k)=(1-dt*cond_e_z(cond_e_z_indices(i,j,k))/(2.0*eps_z(eps_z_indices(i,j,k))*epsilon_0))/(1+dt*cond_e_z(cond_e_z_indices(i,j,k))/(2.0*eps_z(eps_z_indices(i,j,k))*epsilon_0));
-								Cb_Z(i,j,k)=dt/eps_z(eps_z_indices(i,j,k))/epsilon_0/dx/(1+dt*cond_e_z(cond_e_z_indices(i,j,k))/(2.0*eps_z(eps_z_indices(i,j,k))*epsilon_0));
-							}
-						}
-					}
-				}
-			}
-		}
-	}
+          material_offset = (int)((param_temp-min_param)/(max_param-min_param)*(max_number_of_new_materials-1));
+          //material_offset is between 0 and (max_number_of_new_materials-1)  (both included)
+          material_index_Omega_p = material_index_saved_Omega_p_x + (material_offset + 1);	//this is the absolute index in the current material list
+                          // +1 because of the range of material_offset above
+          //place material at the center of the cell
+          Omega_p_x_indices(i,j,k,0) = material_index_Omega_p;
+          alpha_X(i,j,k,0) = (2-pow2(omega_p_x(omega_p_x_indices(i,j,k,0))*dt))/
+                             (1+1/tau_p_x(tau_p_x_indices(i,j,k,0))*dt);
+          xi_X(i,j,k,0) = (1/tau_p_x(tau_p_x_indices(i,j,k,0))*dt-1)/
+                          (1/tau_p_x(tau_p_x_indices(i,j,k,0))*dt+1);
+          gamma_X(i,j,k,0) = (epsilon_0*pow2(Omega_p_x(Omega_p_x_indices(i,j,k,0))*dt))/
+                             (1/tau_p_x(tau_p_x_indices(i,j,k,0))*dt+1)/(2*dt);
 
-	if (constitutive_param_type=="electric_conductivity")
-	{
-		for (int k=zCornerCell; k<=zCornerCell+zExtentInCells-1; k++)
-		{
-			for (int j=yCornerCell; j<=yCornerCell+yExtentInCells-1; j++)
-			{
-				MaterialFile.read((char*)material_row.data(),xExtentInCells*sizeof(material_row(0)));	//read the constitutive parameter x-row into temporary array
-				if ((k>=klower)&&(k<=kupper+1)&&(j>=jleft)&&(j<=jright+1))
-				{
-					for (int i=max(iback,xCornerCell); i<=min(ifront,xCornerCell+xExtentInCells-1); i++)
-					{
-						param_temp = material_row(i);
-						if (shape_mask->IsInside(i-0.5,j-1,k-1))
-						{
-							if (param_temp>=min_param)
-							{//if the value is nonpositive, don't bother with it at all
-								material_offset = (int)((param_temp-min_param)/(max_param-min_param)*(max_number_of_new_materials-1));
-								//material_offset is between 0 and (max_number_of_new_materials-1)  (both included)
-								material_index_cond_e = material_index_saved_cond_e_x + (material_offset + 1);	//this is the absolute index in the current material list
-																									// +1 because of the range of material_offset above
-								//place material at the center of the cell
-								cond_e_x_indices(i,j,k) = material_index_cond_e;
-								Ca_X(i,j,k)=(1-dt*cond_e_x(cond_e_x_indices(i,j,k))/(2.0*eps_x(eps_x_indices(i,j,k))*epsilon_0))/(1+dt*cond_e_x(cond_e_x_indices(i,j,k))/(2.0*eps_x(eps_x_indices(i,j,k))*epsilon_0));
-								Cb_X(i,j,k)=dt/eps_x(eps_x_indices(i,j,k))/epsilon_0/dx/(1+dt*cond_e_x(cond_e_x_indices(i,j,k))/(2.0*eps_x(eps_x_indices(i,j,k))*epsilon_0));
-							}
-						}
-					}
-				}
+          float gamma_p_sum(0.0);
+          gamma_p_sum = 0.5*gamma_X(i,j,k,0)*(2*dt);
 
-				if ((k>=klower)&&(k<=kupper+1)&&(j>=jleft)&&(j<=jright))
-				{
-					for (int i=max(iback,xCornerCell); i<=min(ifront+1,xCornerCell+xExtentInCells-1); i++)
-					{
-						param_temp = material_row(i);
-						if (shape_mask->IsInside(i-1,j-0.5,k-1))
-						{
-							if (param_temp>=min_param)
-							{//if the value is nonpositive, don't bother with it at all
-								material_offset = (int)((param_temp-min_param)/(max_param-min_param)*(max_number_of_new_materials-1));
-								//material_offset is between 0 and (max_number_of_new_materials-1)  (both included)
-								material_index_cond_e = material_index_saved_cond_e_y + (material_offset + 1);	//this is the absolute index in the current material list
-																									// +1 because of the range of material_offset above
-								//place material on the lower side of the cell
-								cond_e_y_indices(i,j,k) = material_index_cond_e;
-								Ca_Y(i,j,k)=(1-dt*cond_e_y(cond_e_y_indices(i,j,k))/(2.0*eps_y(eps_y_indices(i,j,k))*epsilon_0))/(1+dt*cond_e_y(cond_e_y_indices(i,j,k))/(2.0*eps_y(eps_y_indices(i,j,k))*epsilon_0));
-								Cb_Y(i,j,k)=dt/eps_y(eps_y_indices(i,j,k))/epsilon_0/dx/(1+dt*cond_e_y(cond_e_y_indices(i,j,k))/(2.0*eps_y(eps_y_indices(i,j,k))*epsilon_0));
-							}
-						}
-					}
-				}
+          Ca_X(i,j,k) = (2*epsilon_0*eps_x(eps_x_indices(i,j,k))-cond_e_x(cond_e_x_indices(i,j,k))*dt)/
+              (2*epsilon_0*eps_x(eps_x_indices(i,j,k))+gamma_p_sum+cond_e_x(cond_e_x_indices(i,j,k))*dt);
+          Cb_X(i,j,k) = 2*dt/dx/
+              (2*epsilon_0*eps_x(eps_x_indices(i,j,k))+gamma_p_sum+cond_e_x(cond_e_x_indices(i,j,k))*dt);
+          Cc_X(i,j,k) = gamma_p_sum/
+              (2*epsilon_0*eps_x(eps_x_indices(i,j,k))+gamma_p_sum+cond_e_x(cond_e_x_indices(i,j,k))*dt);
+      }
+      if(isWithinBounds(i, iback3[1],  ifront3[1]) &&
+         isWithinBounds(j, jleft3[1],  jright3[1]) &&
+         isWithinBounds(k, klower3[1], kupper3[1])){
+          // set y fields of lorentz_delta_epsilon
 
-				if ((k>=klower)&&(k<=kupper)&&(j>=jleft)&&(j<=jright+1))
-				{
-					for (int i=max(iback,xCornerCell); i<=min(ifront+1,xCornerCell+xExtentInCells-1); i++)
-					{
-						param_temp = material_row(i);
-						if (shape_mask->IsInside(i-1,j-1,k-0.5))
-						{
-							if (param_temp>=min_param)
-							{//if the value is nonpositive, don't bother with it at all
-								material_offset = (int)((param_temp-min_param)/(max_param-min_param)*(max_number_of_new_materials-1));
-								//material_offset is between 0 and (max_number_of_new_materials-1)  (both included)
-								material_index_cond_e = material_index_saved_cond_e_z + (material_offset + 1);	//this is the absolute index in the current material list
-																									// +1 because of the range of material_offset above
-								//place material on the left side of the cell
-								cond_e_z_indices(i,j,k) = material_index_cond_e;
-								Ca_Z(i,j,k)=(1-dt*cond_e_z(cond_e_z_indices(i,j,k))/(2.0*eps_z(eps_z_indices(i,j,k))*epsilon_0))/(1+dt*cond_e_z(cond_e_z_indices(i,j,k))/(2.0*eps_z(eps_z_indices(i,j,k))*epsilon_0));
-								Cb_Z(i,j,k)=dt/eps_z(eps_z_indices(i,j,k))/epsilon_0/dx/(1+dt*cond_e_z(cond_e_z_indices(i,j,k))/(2.0*eps_z(eps_z_indices(i,j,k))*epsilon_0));
-							}
-						}
-					}
-				}
-			}
-		}
-	}
+          Omega_p_y_indices(i,j,k,0) = material_index_Omega_p;
+          alpha_Y(i,j,k,0) = (2-pow2(omega_p_y(omega_p_y_indices(i,j,k,0))*dt))/
+                             (1+1/tau_p_y(tau_p_y_indices(i,j,k,0))*dt);
+          xi_Y(i,j,k,0) = (1/tau_p_y(tau_p_y_indices(i,j,k,0))*dt-1)/
+                          (1/tau_p_y(tau_p_y_indices(i,j,k,0))*dt+1);
+          gamma_Y(i,j,k,0) = (epsilon_0*pow2(Omega_p_y(Omega_p_y_indices(i,j,k,0))*dt))/
+                             (1/tau_p_y(tau_p_y_indices(i,j,k,0))*dt+1)/(2*dt);
 
-	if (constitutive_param_type=="rel_permeability")
-	{
-		for (int k=zCornerCell; k<=zCornerCell+zExtentInCells-1; k++)
-		{
-			for (int j=yCornerCell; j<=yCornerCell+yExtentInCells-1; j++)
-			{
-				MaterialFile.read((char*)material_row.data(),xExtentInCells*sizeof(material_row(0)));	//read the constitutive parameter x-row into temporary array
-				if ((k>=klower)&&(k<=kupper)&&(j>=jleft)&&(j<=jright))
-				{
-					for (int i=max(iback,xCornerCell); i<=min(ifront+1,xCornerCell+xExtentInCells-1); i++)
-					{
-						param_temp = material_row(i);
-						if (shape_mask->IsInside(i-1,j-0.5,k-0.5))
-						{
-							if (param_temp>=min_param)
-							{//if the value is nonpositive, don't bother with it at all
-								material_offset = (int)((param_temp-min_param)/(max_param-min_param)*(max_number_of_new_materials-1));
-								//material_offset is between 0 and (max_number_of_new_materials-1)  (both included)
-								material_index_mu = material_index_saved_mu_x + (material_offset + 1);	//this is the absolute index in the current material list
-																									// +1 because of the range of material_offset above
-								//place material at the center of the cell
-								mu_x_indices(i,j,k) = material_index_mu;
-								Da_X(i,j,k)=(1-dt*cond_h_x(cond_h_x_indices(i,j,k))/(2.0*mu_x(mu_x_indices(i,j,k))*mu_0))/(1+dt*cond_h_x(cond_h_x_indices(i,j,k))/(2.0*mu_x(mu_x_indices(i,j,k))*mu_0));
-								Db_X(i,j,k)=dt/mu_x(mu_x_indices(i,j,k))/mu_0/dx/(1+dt*cond_h_x(cond_h_x_indices(i,j,k))/(2.0*mu_x(mu_x_indices(i,j,k))*mu_0));
-							}
-						}
-					}
-				}
+          float gamma_p_sum(0.0);
+          gamma_p_sum += 0.5*gamma_Y(i,j,k,0)*(2*dt);
+          Ca_Y(i,j,k) = (2*epsilon_0*eps_y(eps_y_indices(i,j,k))-cond_e_y(cond_e_y_indices(i,j,k))*dt)/
+              (2*epsilon_0*eps_y(eps_y_indices(i,j,k))+gamma_p_sum+cond_e_y(cond_e_y_indices(i,j,k))*dt);
+          Cb_Y(i,j,k) = 2*dt/dx/
+              (2*epsilon_0*eps_y(eps_y_indices(i,j,k))+gamma_p_sum+cond_e_y(cond_e_y_indices(i,j,k))*dt);
+          Cc_Y(i,j,k) = gamma_p_sum/
+              (2*epsilon_0*eps_y(eps_y_indices(i,j,k))+gamma_p_sum+cond_e_y(cond_e_y_indices(i,j,k))*dt);
+      }
+      if(isWithinBounds(i, iback3[2],  ifront3[2]) &&
+         isWithinBounds(j, jleft3[2],  jright3[2]) &&
+         isWithinBounds(k, klower3[2], kupper3[2])){
+         // set z fields of lorentz_delta_epsilon
 
-				if ((k>=klower)&&(k<=kupper)&&(j>=jleft)&&(j<=jright+1))
-				{
-					for (int i=max(iback,xCornerCell); i<=min(ifront,xCornerCell+xExtentInCells-1); i++)
-					{
-						param_temp = material_row(i);
-						if (shape_mask->IsInside(i-0.5,j-1,k-0.5))
-						{
-							if (param_temp>=min_param)
-							{//if the value is nonpositive, don't bother with it at all
-								material_offset = (int)((param_temp-min_param)/(max_param-min_param)*(max_number_of_new_materials-1));
-								//material_offset is between 0 and (max_number_of_new_materials-1)  (both included)
-								material_index_mu = material_index_saved_mu_y + (material_offset + 1);	//this is the absolute index in the current material list
-																									// +1 because of the range of material_offset above
-								//place material on the lower side of the cell
-								mu_y_indices(i,j,k) = material_index_mu;
-								Da_Y(i,j,k)=(1-dt*cond_h_y(cond_h_y_indices(i,j,k))/(2.0*mu_y(mu_y_indices(i,j,k))*mu_0))/(1+dt*cond_h_y(cond_h_y_indices(i,j,k))/(2.0*mu_y(mu_y_indices(i,j,k))*mu_0));
-								Db_Y(i,j,k)=dt/mu_y(mu_y_indices(i,j,k))/mu_0/dx/(1+dt*cond_h_y(cond_h_y_indices(i,j,k))/(2.0*mu_y(mu_y_indices(i,j,k))*mu_0));
-							}
-						}
-					}
-				}
+         material_offset = (int)((param_temp-min_param)/(max_param-min_param)*(max_number_of_new_materials-1));
+         //material_offset is between 0 and (max_number_of_new_materials-1)  (both included)
+         material_index_Omega_p = material_index_saved_Omega_p_z + (material_offset + 1);	//this is the absolute index in the current material list
+                         // +1 because of the range of material_offset above
+         //place material on the left side of the cell
+         Omega_p_z_indices(i,j,k,0) = material_index_Omega_p;
 
-				if ((k>=klower)&&(k<=kupper+1)&&(j>=jleft)&&(j<=jright))
-				{
-					for (int i=max(iback,xCornerCell); i<=min(ifront,xCornerCell+xExtentInCells-1); i++)
-					{
-						param_temp = material_row(i);
-						if (shape_mask->IsInside(i-0.5,j-0.5,k-1))
-						{
-							if (param_temp>=min_param)
-							{//if the value is nonpositive, don't bother with it at all
-								material_offset = (int)((param_temp-min_param)/(max_param-min_param)*(max_number_of_new_materials-1));
-								//material_offset is between 0 and (max_number_of_new_materials-1)  (both included)
-								material_index_mu = material_index_saved_mu_z + (material_offset + 1);	//this is the absolute index in the current material list
-																									// +1 because of the range of material_offset above
-								//place material on the left side of the cell
-								mu_z_indices(i,j,k) = material_index_mu;
-								Da_Z(i,j,k)=(1-dt*cond_h_z(cond_h_z_indices(i,j,k))/(2.0*mu_z(mu_z_indices(i,j,k))*mu_0))/(1+dt*cond_h_z(cond_h_z_indices(i,j,k))/(2.0*mu_z(mu_z_indices(i,j,k))*mu_0));
-								Db_Z(i,j,k)=dt/mu_z(mu_z_indices(i,j,k))/mu_0/dx/(1+dt*cond_h_z(cond_h_z_indices(i,j,k))/(2.0*mu_z(mu_z_indices(i,j,k))*mu_0));
-							}
-						}
-					}
-				}
-			}
-		}
-	}
-
-	if (constitutive_param_type=="magnetic_conductivity")
-	{
-		for (int k=zCornerCell; k<=zCornerCell+zExtentInCells-1; k++)
-		{
-			for (int j=yCornerCell; j<=yCornerCell+yExtentInCells-1; j++)
-			{
-				MaterialFile.read((char*)material_row.data(),xExtentInCells*sizeof(material_row(0)));	//read the constitutive parameter x-row into temporary array
-				if ((k>=klower)&&(k<=kupper)&&(j>=jleft)&&(j<=jright))
-				{
-					for (int i=max(iback,xCornerCell); i<=min(ifront+1,xCornerCell+xExtentInCells-1); i++)
-					{
-						param_temp = material_row(i);
-						if (shape_mask->IsInside(i-1,j-0.5,k-0.5))
-						{
-							if (param_temp>=min_param)
-							{//if the value is nonpositive, don't bother with it at all
-								material_offset = (int)((param_temp-min_param)/(max_param-min_param)*(max_number_of_new_materials-1));
-								//material_offset is between 0 and (max_number_of_new_materials-1)  (both included)
-								material_index_cond_h = material_index_saved_cond_h_x + (material_offset + 1);	//this is the absolute index in the current material list
-																									// +1 because of the range of material_offset above
-								//place material at the center of the cell
-								cond_h_x_indices(i,j,k) = material_index_cond_h;
-								Da_X(i,j,k)=(1-dt*cond_h_x(cond_h_x_indices(i,j,k))/(2.0*mu_x(mu_x_indices(i,j,k))*mu_0))/(1+dt*cond_h_x(cond_h_x_indices(i,j,k))/(2.0*mu_x(mu_x_indices(i,j,k))*mu_0));
-								Db_X(i,j,k)=dt/mu_x(mu_x_indices(i,j,k))/mu_0/dx/(1+dt*cond_h_x(cond_h_x_indices(i,j,k))/(2.0*mu_x(mu_x_indices(i,j,k))*mu_0));
-							}
-						}
-					}
-				}
-
-				if ((k>=klower)&&(k<=kupper)&&(j>=jleft)&&(j<=jright+1))
-				{
-					for (int i=max(iback,xCornerCell); i<=min(ifront,xCornerCell+xExtentInCells-1); i++)
-					{
-						param_temp = material_row(i);
-						if (shape_mask->IsInside(i-0.5,j-1,k-0.5))
-						{
-							if (param_temp>=min_param)
-							{//if the value is nonpositive, don't bother with it at all
-								material_offset = (int)((param_temp-min_param)/(max_param-min_param)*(max_number_of_new_materials-1));
-								//material_offset is between 0 and (max_number_of_new_materials-1)  (both included)
-								material_index_cond_h = material_index_saved_cond_h_y + (material_offset + 1);	//this is the absolute index in the current material list
-																									// +1 because of the range of material_offset above
-								//place material on the lower side of the cell
-								cond_h_y_indices(i,j,k) = material_index_cond_h;
-								Da_Y(i,j,k)=(1-dt*cond_h_y(cond_h_y_indices(i,j,k))/(2.0*mu_y(mu_y_indices(i,j,k))*mu_0))/(1+dt*cond_h_y(cond_h_y_indices(i,j,k))/(2.0*mu_y(mu_y_indices(i,j,k))*mu_0));
-								Db_Y(i,j,k)=dt/mu_y(mu_y_indices(i,j,k))/mu_0/dx/(1+dt*cond_h_y(cond_h_y_indices(i,j,k))/(2.0*mu_y(mu_y_indices(i,j,k))*mu_0));
-							}
-						}
-					}
-				}
-
-				if ((k>=klower)&&(k<=kupper+1)&&(j>=jleft)&&(j<=jright))
-				{
-					for (int i=max(iback,xCornerCell); i<=min(ifront,xCornerCell+xExtentInCells-1); i++)
-					{
-						param_temp = material_row(i);
-						if (shape_mask->IsInside(i-0.5,j-0.5,k-1))
-						{
-							if (param_temp>=min_param)
-							{//if the value is nonpositive, don't bother with it at all
-								material_offset = (int)((param_temp-min_param)/(max_param-min_param)*(max_number_of_new_materials-1));
-								//material_offset is between 0 and (max_number_of_new_materials-1)  (both included)
-								material_index_cond_h = material_index_saved_cond_h_z + (material_offset + 1);	//this is the absolute index in the current material list
-																									// +1 because of the range of material_offset above
-								//place material on the left side of the cell
-								cond_h_z_indices(i,j,k) = material_index_cond_h;
-								Da_Z(i,j,k)=(1-dt*cond_h_z(cond_h_z_indices(i,j,k))/(2.0*mu_z(mu_z_indices(i,j,k))*mu_0))/(1+dt*cond_h_z(cond_h_z_indices(i,j,k))/(2.0*mu_z(mu_z_indices(i,j,k))*mu_0));
-								Db_Z(i,j,k)=dt/mu_z(mu_z_indices(i,j,k))/mu_0/dx/(1+dt*cond_h_z(cond_h_z_indices(i,j,k))/(2.0*mu_z(mu_z_indices(i,j,k))*mu_0));
-							}
-						}
-					}
-				}
-			}
-		}
-	}
-
-    if (constitutive_param_type=="lorentz_delta_epsilon")
-	{
-		for (int k=zCornerCell; k<=zCornerCell+zExtentInCells-1; k++)
-		{
-			for (int j=yCornerCell; j<=yCornerCell+yExtentInCells-1; j++)
-			{
-				MaterialFile.read((char*)material_row.data(),xExtentInCells*sizeof(material_row(0)));	//read the constitutive parameter x-row into temporary array
-				if ((k>=klower)&&(k<=kupper+1)&&(j>=jleft)&&(j<=jright+1))
-				{
-					for (int i=max(iback,xCornerCell); i<=min(ifront,xCornerCell+xExtentInCells-1); i++)
-					{
-						param_temp = material_row(i);
-						if (shape_mask->IsInside(i-0.5,j-1,k-1))
-						{
-							if (param_temp>=min_param)
-							{//if the value is nonpositive, don't bother with it at all
-								material_offset = (int)((param_temp-min_param)/(max_param-min_param)*(max_number_of_new_materials-1));
-								//material_offset is between 0 and (max_number_of_new_materials-1)  (both included)
-								material_index_Omega_p = material_index_saved_Omega_p_x + (material_offset + 1);	//this is the absolute index in the current material list
-																// +1 because of the range of material_offset above
-								//place material at the center of the cell
-								Omega_p_x_indices(i,j,k,0) = material_index_Omega_p;
-                                alpha_X(i,j,k,0) = (2-pow2(omega_p_x(omega_p_x_indices(i,j,k,0))*dt))/
-                                                   (1+1/tau_p_x(tau_p_x_indices(i,j,k,0))*dt);
-                                xi_X(i,j,k,0) = (1/tau_p_x(tau_p_x_indices(i,j,k,0))*dt-1)/
-                                                (1/tau_p_x(tau_p_x_indices(i,j,k,0))*dt+1);
-                                gamma_X(i,j,k,0) = (epsilon_0*pow2(Omega_p_x(Omega_p_x_indices(i,j,k,0))*dt))/
-                                                   (1/tau_p_x(tau_p_x_indices(i,j,k,0))*dt+1)/(2*dt);
-
-                                float gamma_p_sum(0.0);
-                                gamma_p_sum = 0.5*gamma_X(i,j,k,0)*(2*dt);
-
-                                Ca_X(i,j,k) = (2*epsilon_0*eps_x(eps_x_indices(i,j,k))-cond_e_x(cond_e_x_indices(i,j,k))*dt)/
-                                    (2*epsilon_0*eps_x(eps_x_indices(i,j,k))+gamma_p_sum+cond_e_x(cond_e_x_indices(i,j,k))*dt);
-                                Cb_X(i,j,k) = 2*dt/dx/
-                                    (2*epsilon_0*eps_x(eps_x_indices(i,j,k))+gamma_p_sum+cond_e_x(cond_e_x_indices(i,j,k))*dt);
-                                Cc_X(i,j,k) = gamma_p_sum/
-                                    (2*epsilon_0*eps_x(eps_x_indices(i,j,k))+gamma_p_sum+cond_e_x(cond_e_x_indices(i,j,k))*dt);
-
-							}
-						}
-					}
-				}
-
-				if ((k>=klower)&&(k<=kupper+1)&&(j>=jleft)&&(j<=jright))
-				{
-					for (int i=max(iback,xCornerCell); i<=min(ifront+1,xCornerCell+xExtentInCells-1); i++)
-					{
-						param_temp = material_row(i);
-						if (shape_mask->IsInside(i-1,j-0.5,k-1))
-						{
-							if (param_temp>=min_param)
-							{//if the value is nonpositive, don't bother with it at all
-								material_offset = (int)((param_temp-min_param)/(max_param-min_param)*(max_number_of_new_materials-1));
-								//material_offset is between 0 and (max_number_of_new_materials-1)  (both included)
-								material_index_Omega_p = material_index_saved_Omega_p_y + (material_offset + 1);	//this is the absolute index in the current material list																	// +1 because of the range of material_offset above
-								//place material on the lower side of the cell
-								Omega_p_y_indices(i,j,k,0) = material_index_Omega_p;
-                                alpha_Y(i,j,k,0) = (2-pow2(omega_p_y(omega_p_y_indices(i,j,k,0))*dt))/
-                                                   (1+1/tau_p_y(tau_p_y_indices(i,j,k,0))*dt);
-                                xi_Y(i,j,k,0) = (1/tau_p_y(tau_p_y_indices(i,j,k,0))*dt-1)/
-                                                (1/tau_p_y(tau_p_y_indices(i,j,k,0))*dt+1);
-                                gamma_Y(i,j,k,0) = (epsilon_0*pow2(Omega_p_y(Omega_p_y_indices(i,j,k,0))*dt))/
-                                                   (1/tau_p_y(tau_p_y_indices(i,j,k,0))*dt+1)/(2*dt);
-
-                                float gamma_p_sum(0.0);
-                                gamma_p_sum += 0.5*gamma_Y(i,j,k,0)*(2*dt);
-                                Ca_Y(i,j,k) = (2*epsilon_0*eps_y(eps_y_indices(i,j,k))-cond_e_y(cond_e_y_indices(i,j,k))*dt)/
-                                    (2*epsilon_0*eps_y(eps_y_indices(i,j,k))+gamma_p_sum+cond_e_y(cond_e_y_indices(i,j,k))*dt);
-                                Cb_Y(i,j,k) = 2*dt/dx/
-                                    (2*epsilon_0*eps_y(eps_y_indices(i,j,k))+gamma_p_sum+cond_e_y(cond_e_y_indices(i,j,k))*dt);
-                                Cc_Y(i,j,k) = gamma_p_sum/
-                                    (2*epsilon_0*eps_y(eps_y_indices(i,j,k))+gamma_p_sum+cond_e_y(cond_e_y_indices(i,j,k))*dt);
-							}
-						}
-					}
-				}
-
-				if ((k>=klower)&&(k<=kupper)&&(j>=jleft)&&(j<=jright+1))
-				{
-					for (int i=max(iback,xCornerCell); i<=min(ifront+1,xCornerCell+xExtentInCells-1); i++)
-					{
-						param_temp = material_row(i);
-						if (shape_mask->IsInside(i-1,j-1,k-0.5))
-						{
-						    if (param_temp>=min_param)
-							{//if the value is nonpositive, don't bother with it at all
-								material_offset = (int)((param_temp-min_param)/(max_param-min_param)*(max_number_of_new_materials-1));
-								//material_offset is between 0 and (max_number_of_new_materials-1)  (both included)
-								material_index_Omega_p = material_index_saved_Omega_p_z + (material_offset + 1);	//this is the absolute index in the current material list
-																// +1 because of the range of material_offset above
-								//place material on the left side of the cell
-								Omega_p_z_indices(i,j,k,0) = material_index_Omega_p;
-
-                                alpha_Z(i,j,k,0) = (2-pow2(omega_p_z(omega_p_z_indices(i,j,k,0))*dt))/
-                                                   (1+1/tau_p_z(tau_p_z_indices(i,j,k,0))*dt);
-                                xi_Z(i,j,k,0) = (1/tau_p_z(tau_p_z_indices(i,j,k,0))*dt-1)/
-                                                (1/tau_p_z(tau_p_z_indices(i,j,k,0))*dt+1);
-                                gamma_Z(i,j,k,0) = (epsilon_0*pow2(Omega_p_z(Omega_p_z_indices(i,j,k,0))*dt))/
-                                                   (1/tau_p_z(tau_p_z_indices(i,j,k,0))*dt+1)/(2*dt);
-                                float gamma_p_sum(0.0);
-                                gamma_p_sum += 0.5*gamma_Z(i,j,k,0)*(2*dt);
-                                Ca_Z(i,j,k) = (2*epsilon_0*eps_z(eps_z_indices(i,j,k))-cond_e_z(cond_e_z_indices(i,j,k))*dt)/
-                                    (2*epsilon_0*eps_z(eps_z_indices(i,j,k))+gamma_p_sum+cond_e_z(cond_e_z_indices(i,j,k))*dt);
-                                Cb_Z(i,j,k) = 2*dt/dx/
-                                    (2*epsilon_0*eps_z(eps_z_indices(i,j,k))+gamma_p_sum+cond_e_z(cond_e_z_indices(i,j,k))*dt);
-                                Cc_Z(i,j,k) = gamma_p_sum/
-                                    (2*epsilon_0*eps_z(eps_z_indices(i,j,k))+gamma_p_sum+cond_e_z(cond_e_z_indices(i,j,k))*dt);
-							}
-						}
-					}
-				}
-			}
-		}
-	}
+         alpha_Z(i,j,k,0) = (2-pow2(omega_p_z(omega_p_z_indices(i,j,k,0))*dt))/
+                            (1+1/tau_p_z(tau_p_z_indices(i,j,k,0))*dt);
+         xi_Z(i,j,k,0) = (1/tau_p_z(tau_p_z_indices(i,j,k,0))*dt-1)/
+                         (1/tau_p_z(tau_p_z_indices(i,j,k,0))*dt+1);
+         gamma_Z(i,j,k,0) = (epsilon_0*pow2(Omega_p_z(Omega_p_z_indices(i,j,k,0))*dt))/
+                            (1/tau_p_z(tau_p_z_indices(i,j,k,0))*dt+1)/(2*dt);
+         float gamma_p_sum(0.0);
+         gamma_p_sum += 0.5*gamma_Z(i,j,k,0)*(2*dt);
+         Ca_Z(i,j,k) = (2*epsilon_0*eps_z(eps_z_indices(i,j,k))-cond_e_z(cond_e_z_indices(i,j,k))*dt)/
+             (2*epsilon_0*eps_z(eps_z_indices(i,j,k))+gamma_p_sum+cond_e_z(cond_e_z_indices(i,j,k))*dt);
+         Cb_Z(i,j,k) = 2*dt/dx/
+             (2*epsilon_0*eps_z(eps_z_indices(i,j,k))+gamma_p_sum+cond_e_z(cond_e_z_indices(i,j,k))*dt);
+         Cc_Z(i,j,k) = gamma_p_sum/
+             (2*epsilon_0*eps_z(eps_z_indices(i,j,k))+gamma_p_sum+cond_e_z(cond_e_z_indices(i,j,k))*dt);
+      }
+    }
+  }
 
 
-	//finally, close the file
-	MaterialFile.close();
-//	if (rank==0)
-//	{
-//		cout << "Material region read." << endl << endl;
-//	}
+  MPI_Barrier(MPI_COMM_WORLD);
+  MPI_File_close(&fh);
+  if(rank==0){
+    duration = (clock() - start ) / (double) CLOCKS_PER_SEC;
+    cout << "Finished reading file in " << duration << " seconds." << endl;
+  }
+
+/*
+if(rank<20){
+  printf("CLOSING FILE...\n");
+  myfile1.close();
+}*/
+//  exit(-1);
 }
-
 #endif // MATFILE_H
