@@ -1,0 +1,5 @@
+const.lo: const.c /usr/include/stdc-predef.h mconf.h
+
+/usr/include/stdc-predef.h:
+
+mconf.h:

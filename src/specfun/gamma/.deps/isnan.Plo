@@ -1,0 +1,5 @@
+isnan.lo: isnan.c /usr/include/stdc-predef.h mconf.h
+
+/usr/include/stdc-predef.h:
+
+mconf.h:

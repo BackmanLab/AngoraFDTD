@@ -1,0 +1,5 @@
+gamma.lo: gamma.c /usr/include/stdc-predef.h mconf.h
+
+/usr/include/stdc-predef.h:
+
+mconf.h:
