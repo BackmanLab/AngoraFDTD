@@ -1,6 +1,0 @@
-Di Zhang:
-2/25/2016: Random material:lorentz_delta_epsilon option is now refering to Omega_p=omega_p*sqrt(delta_epsilon).
-           Change it to generate random delta_epsilon in thefuture
-2/25/2016: Input file: add dispersion parameter input 
-2/25/2016: Recorder: add dispersion recording
-2/25/2016: Surface_engraving: add dispersion removal upon suface
